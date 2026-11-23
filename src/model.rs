@@ -68,6 +68,12 @@ pub struct Source {
     // Runtime sources are local imports only. This binding must be deliberately
     // configured by the owner; a wire event cannot choose its public identity.
     pub runtime: Option<RuntimeBinding>,
+    #[serde(default = "default_poll_seconds")]
+    pub poll_seconds: u32,
+    pub freshness_seconds: Option<u32>,
+}
+fn default_poll_seconds() -> u32 {
+    60
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -89,6 +95,7 @@ pub enum SourceKind {
     GithubReviews,
     Cma,
     Nyxid,
+    Session,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -236,6 +243,7 @@ pub struct View {
     pub departments: Vec<DepartmentView>,
     pub routes: Vec<Route>,
     pub handoffs: Vec<Handoff>,
+    pub handoffs_truncated: bool,
     pub recent: Vec<Activity>,
     pub sources: Vec<SourceView>,
 }
@@ -246,6 +254,8 @@ pub struct DepartmentView {
     pub department: Department,
     pub running_automations: usize,
     pub running_sessions: usize,
+    pub observed_activities: usize,
+    pub activities_truncated: bool,
     pub participants: Vec<Actor>,
     pub activities: Vec<Activity>,
 }
@@ -278,9 +288,16 @@ pub struct SourceView {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Handoff {
+    pub kind: RelationKind,
     pub from: String,
     pub to: String,
     pub activity: String,
     pub reference: Reference,
     pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationKind {
+    Reference,
 }

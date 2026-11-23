@@ -5,9 +5,17 @@ use crate::{
 };
 use chrono::Utc;
 use reqwest::blocking::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeMap, io::Read, time::Duration};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    io::Read,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 #[derive(Debug, Serialize)]
 pub struct SourceFailure {
@@ -19,19 +27,47 @@ pub struct Collection {
     pub ingest: Ingest,
     pub failures: Vec<SourceFailure>,
     pub requests: usize,
+    pub charged_requests: usize,
+    #[serde(skip)]
+    pub cache: ReaderCache,
+}
+
+pub type ReaderCache = BTreeMap<String, CachedResponse>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CachedResponse {
+    etag: String,
+    value: Value,
+    complete: bool,
 }
 
 struct Reader {
     client: Client,
     token: String,
     requests: usize,
+    charged_requests: usize,
+    cache: ReaderCache,
+    budget: Arc<AtomicUsize>,
 }
 impl Reader {
     fn get(&mut self, path: &str, query: &[(&str, &str)]) -> Result<(Value, bool)> {
-        if self.requests >= 80 {
-            return Err(Error::Source("collection request budget reached".into()));
+        let mut reserved = self.budget.load(Ordering::Relaxed);
+        loop {
+            if reserved >= 80 {
+                return Err(Error::Source("collection request budget reached".into()));
+            }
+            match self.budget.compare_exchange_weak(
+                reserved,
+                reserved + 1,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(current) => reserved = current,
+            }
         }
         self.requests += 1;
+        let cache_key = serde_json::to_string(&(path, query))?;
         let mut request = self
             .client
             .get(format!("https://api.github.com{path}"))
@@ -41,9 +77,20 @@ impl Reader {
         if !self.token.is_empty() {
             request = request.bearer_auth(&self.token);
         }
+        if let Some(cached) = self.cache.get(&cache_key) {
+            request = request.header("If-None-Match", &cached.etag);
+        }
         let response = request
             .send()
             .map_err(|_| Error::Source("GitHub transport unavailable".into()))?;
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            let cached = self
+                .cache
+                .get(&cache_key)
+                .ok_or_else(|| Error::Source("unbound conditional response".into()))?;
+            return Ok((cached.value.clone(), cached.complete));
+        }
+        self.charged_requests += 1;
         if !response.status().is_success() {
             return Err(Error::Source(format!(
                 "GitHub HTTP {}",
@@ -55,12 +102,30 @@ impl Reader {
             .get("link")
             .and_then(|h| h.to_str().ok())
             .is_some_and(|v| v.contains("rel=\"next\""));
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|h| h.to_str().ok())
+            .map(str::to_owned);
         let mut bytes = Vec::new();
         response.take(8 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
         if bytes.len() > 8 * 1024 * 1024 {
             return Err(Error::Source("GitHub response exceeds byte bound".into()));
         }
-        Ok((serde_json::from_slice(&bytes)?, complete))
+        let value: Value = serde_json::from_slice(&bytes)?;
+        if let Some(etag) = etag {
+            self.cache.insert(
+                cache_key,
+                CachedResponse {
+                    etag,
+                    value: value.clone(),
+                    complete,
+                },
+            );
+        } else {
+            self.cache.remove(&cache_key);
+        }
+        Ok((value, complete))
     }
 
     fn observe(
@@ -166,7 +231,12 @@ impl Reader {
     }
 }
 
-pub fn collect(config: &Config, token: String) -> Result<Collection> {
+pub fn collect(
+    config: &Config,
+    token: String,
+    cache: ReaderCache,
+    previous: Option<&Checkpoint>,
+) -> Result<Collection> {
     crate::validate_config(config)?;
     let client = Client::builder()
         .timeout(Duration::from_secs(15))
@@ -174,30 +244,127 @@ pub fn collect(config: &Config, token: String) -> Result<Collection> {
         .user_agent("ai-org-live-harness/0.1")
         .build()
         .map_err(|_| Error::Source("HTTP client initialization failed".into()))?;
-    let mut reader = Reader {
-        client,
-        token,
-        requests: 0,
-    };
-    let mut metadata = BTreeMap::new();
-    let mut batches = Vec::new();
-    let mut failures = Vec::new();
+    let mut groups: BTreeMap<&str, Vec<&Source>> = BTreeMap::new();
+    let started_at = Utc::now();
     for source in &config.sources {
         if source.runtime.is_some() {
             continue;
         }
-        match reader
-            .observe(source, &mut metadata)
-            .and_then(|input| adapters::github(config, input))
+        if previous
+            .and_then(|p| p.sources.get(&source.id))
+            .is_some_and(|prior| {
+                started_at
+                    .signed_duration_since(prior.observed_at)
+                    .num_seconds()
+                    < i64::from(source.poll_seconds)
+            })
         {
-            Ok(batch) => batches.push(batch),
-            Err(error) => failures.push(SourceFailure {
-                source: source.id.clone(),
-                reason: error.to_string(),
-            }),
+            continue;
         }
+        groups
+            .entry(source.repository.as_deref().unwrap())
+            .or_default()
+            .push(source);
     }
-    if batches.is_empty() {
+    let attempted = groups.values().map(Vec::len).sum::<usize>();
+    let queue = Mutex::new(VecDeque::from_iter(groups));
+    let budget = Arc::new(AtomicUsize::new(0));
+    let results = std::thread::scope(|scope| {
+        let mut workers = Vec::new();
+        for _ in 0..4 {
+            workers.push(scope.spawn(|| {
+                let mut results = Vec::new();
+                loop {
+                    let group = queue.lock().unwrap().pop_front();
+                    let Some((repo, sources)) = group else {
+                        break;
+                    };
+                    let prefix = format!("/repos/{repo}/");
+                    let mut reader = Reader {
+                        client: client.clone(),
+                        token: token.clone(),
+                        requests: 0,
+                        charged_requests: 0,
+                        cache: cache
+                            .iter()
+                            .filter(|(key, _)| {
+                                serde_json::from_str::<(String, Value)>(key).is_ok_and(
+                                    |(path, _)| {
+                                        path == format!("/repos/{repo}")
+                                            || path.starts_with(&prefix)
+                                    },
+                                )
+                            })
+                            .map(|(key, value)| (key.clone(), value.clone()))
+                            .collect(),
+                        budget: budget.clone(),
+                    };
+                    let mut metadata = BTreeMap::new();
+                    let mut batches = Vec::new();
+                    let mut failures = Vec::new();
+                    let mut repository_failure: Option<String> = None;
+                    for source in sources {
+                        if let Some(reason) = &repository_failure {
+                            failures.push(SourceFailure {
+                                source: source.id.clone(),
+                                reason: reason.clone(),
+                            });
+                            continue;
+                        }
+                        match reader
+                            .observe(source, &mut metadata)
+                            .and_then(|input| adapters::github(config, input))
+                        {
+                            Ok(batch) => batches.push(batch),
+                            Err(error) => {
+                                let reason = error.to_string();
+                                if metadata.is_empty() {
+                                    repository_failure = Some(reason.clone());
+                                }
+                                failures.push(SourceFailure {
+                                    source: source.id.clone(),
+                                    reason,
+                                });
+                            }
+                        }
+                    }
+                    results.push((
+                        batches,
+                        failures,
+                        reader.requests,
+                        reader.charged_requests,
+                        reader.cache,
+                    ));
+                }
+                results
+            }));
+        }
+        workers
+            .into_iter()
+            .map(|worker| {
+                worker
+                    .join()
+                    .map_err(|_| Error::Source("source reader worker failed".into()))
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    let mut batches = Vec::new();
+    let mut failures = Vec::new();
+    let mut requests = 0;
+    let mut charged_requests = 0;
+    let mut cache = cache;
+    for (mut read_batches, mut read_failures, read_requests, charged, entries) in
+        results.into_iter().flatten()
+    {
+        batches.append(&mut read_batches);
+        failures.append(&mut read_failures);
+        requests += read_requests;
+        charged_requests += charged;
+        cache.extend(entries);
+    }
+    batches.sort_by(|a, b| a.source.cmp(&b.source));
+    failures.sort_by(|a, b| a.source.cmp(&b.source));
+    if attempted > 0 && batches.is_empty() {
         return Err(Error::Source(
             "no current source readings; existing checkpoint retained".into(),
         ));
@@ -208,6 +375,8 @@ pub fn collect(config: &Config, token: String) -> Result<Collection> {
             batches,
         },
         failures,
-        requests: reader.requests,
+        requests,
+        charged_requests,
+        cache,
     })
 }

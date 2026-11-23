@@ -14,6 +14,22 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    Report {
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        generation: u64,
+        #[arg(long)]
+        status: String,
+        #[arg(long)]
+        task: Option<String>,
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     Check {
         #[arg(long)]
         config: PathBuf,
@@ -93,6 +109,40 @@ enum Command {
 }
 fn run() -> Result<()> {
     match Cli::parse().command {
+        Command::Report {
+            config,
+            source,
+            generation,
+            status,
+            task,
+            state,
+            output,
+        } => {
+            let config = store::read_json(&config)?;
+            let status = serde_json::from_value(serde_json::Value::String(status))?;
+            let task = task
+                .map(|value| -> Result<Reference> {
+                    let (repository, number) = value.rsplit_once('#').ok_or_else(|| {
+                        live_harness::Error::Contract("task must be OWNER/REPO#NUMBER".into())
+                    })?;
+                    Ok(Reference {
+                        repository: repository.into(),
+                        number: number.parse().map_err(|_| {
+                            live_harness::Error::Contract("invalid task number".into())
+                        })?,
+                    })
+                })
+                .transpose()?;
+            store::transaction(&config, &state, &output, |previous| {
+                let at = Utc::now();
+                Ok(Ingest {
+                    as_of: at,
+                    batches: vec![adapters::session_report(
+                        &config, &source, generation, status, task, at, previous,
+                    )?],
+                })
+            })?;
+        }
         Command::Check { config } => {
             live_harness::validate_config(&store::read_json(&config)?)?;
             println!("configuration valid");
@@ -103,16 +153,38 @@ fn run() -> Result<()> {
             output,
         } => {
             let config: Config = store::read_json(&config)?;
+            let previous: Option<Checkpoint> = match store::read_json(&state) {
+                Ok(state) => Some(state),
+                Err(live_harness::Error::Io(error))
+                    if error.kind() == std::io::ErrorKind::NotFound =>
+                {
+                    None
+                }
+                Err(error) => return Err(error),
+            };
+            let cache_path = state.with_extension("http-cache.json");
+            let cache = match store::read_json(&cache_path) {
+                Ok(cache) => cache,
+                Err(live_harness::Error::Io(error))
+                    if error.kind() == std::io::ErrorKind::NotFound =>
+                {
+                    Default::default()
+                }
+                Err(error) => return Err(error),
+            };
             let collection = github::collect(
                 &config,
                 std::env::var("GH_TOKEN")
                     .or_else(|_| std::env::var("GITHUB_TOKEN"))
                     .unwrap_or_default(),
+                cache,
+                previous.as_ref(),
             )?;
+            store::atomic_json(&cache_path, &collection.cache)?;
             let view = store::transaction(&config, &state, &output, |_| Ok(collection.ingest))?;
             eprintln!(
                 "{}",
-                serde_json::json!({"observed_at":view.observed_at,"requests":collection.requests,"failures":collection.failures})
+                serde_json::json!({"observed_at":view.observed_at,"requests":collection.requests,"charged_requests":collection.charged_requests,"failures":collection.failures})
             );
         }
         Command::Ingest {

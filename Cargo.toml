@@ -2,7 +2,7 @@
 name = "live-harness"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.95"
 description = "Deterministic, source-bound observations of AI organizations"
 license = "MIT"
 

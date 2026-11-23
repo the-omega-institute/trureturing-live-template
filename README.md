@@ -12,7 +12,7 @@ messages. The trureturing deployment is maintained in
 
 ## Start with GitHub
 
-1. Use this template, or install the CLI from a pinned release. Rust 1.89 or newer
+1. Use this template, or install the CLI from a pinned release. The pinned Rust 1.95.0
    builds the locked source with `cargo build --release --locked`.
 2. Copy `examples/organization.json` to `organization.json`. Replace the repository
    placeholders and workflow paths; edit department names, responsibilities and
@@ -45,6 +45,14 @@ its last observation and becomes stale; a total outage exits nonzero and preserv
 both published files. The caller should retry with normal backoff, retaining the
 original process/job handle while a job remains active.
 
+Each source can set `poll_seconds` (default 60) and `freshness_seconds` (otherwise
+the organization default). Busy research and coordinator sources can update every
+minute while infrequently changing tools are checked every five minutes. A private
+HTTP cache beside the checkpoint keeps ETags and bounded native responses. Requests
+still reach GitHub; authenticated 304 responses avoid primary API quota charges.
+This cache is an optimization, never the public view. Do not publish it. Collection
+statistics separate total requests from responses that were not 304.
+
 ## Meaning of the view
 
 - GitHub accounts are participants, not independently identified AI sessions.
@@ -53,11 +61,41 @@ original process/job handle while a job remains active.
   lifecycle event. Polling an old event does not renew a session's presence.
 - A successful workflow is successful execution. A merged PR is a merged
   contribution. Neither is promoted to a proven mathematical result or sent email.
-- Configured `routes` describe responsibilities. `handoffs` require an explicit
-  source reference to a task observed in another department. They are not inferred
-  from co-occurrence or decorative map layout.
+- Configured `routes` describe responsibilities. Entries in `handoffs` currently
+  carry `kind: reference`: an explicit source link to a task observed in another
+  department. They establish a research connection, not a private dispatch, direct
+  message or transfer of responsibility.
 
 ## Runtime imports
+
+Independent Codex / Claude / AGY / heca sessions can use `report` without running
+inside CMA. Add a source such as the following to your organization's `sources`:
+
+```json
+{"id":"researcher-a","kind":"session","department":"research","label":"Research seat A",
+ "runtime":{"resource_id":"your-private-session-binding",
+ "actor":{"id":"researcher-a","label":"Researcher A","kind":"agent","tool":"Codex"},
+ "public_label":"Developing the current proof","publish":true}}
+```
+
+The session's own integration reports the state it actually knows. `report`
+generates the next cursor under the checkpoint lock, so separate command
+invocations recover consistently. While work continues, emit a fresh `working`
+report before the configured lease expires; emit `waiting`, `succeeded`, `failed`
+or `cancelled` when that phase changes. A settled generation cannot work again;
+start a new generation for a new turn/run. The command does not inspect a process
+or infer that an open terminal is doing research.
+
+```sh
+live-harness report --config organization.json --source researcher-a \
+  --generation 1 --status working --task YOUR-ORG/YOUR-RESEARCH-REPO#42 \
+  --state .live-state/checkpoint.json --output public/organization.json
+```
+
+Private bindings stay in the local checkpoint. Only the owner-approved public
+role, tool, status and registered public task appear in the output. Connect the
+output through your deployment's authorized transport; this command does not send
+it to GitHub, a public server or any other person.
 
 Runtime imports operate on **owner-supplied local files**. The harness does not
 discover sessions, request CMA/NyxID credentials, connect to private endpoints or

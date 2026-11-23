@@ -4,7 +4,14 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::LazyLock};
+
+static EXPLICIT_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:issues|pull)/(\d+)|(?:^|[^\w/])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(\d+)").unwrap()
+});
+static QUALIFIED_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue|research(?:\s+(?:issue|line|unit|and independent form evidence))?)\b|研究线|研究问题|课题)\s*[:：]?\s*#(\d+)").unwrap()
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,14 +57,16 @@ fn account(row: &Value) -> Option<Actor> {
 }
 
 pub fn references(body: &str, config: &Config, local: &str) -> Vec<Reference> {
+    if body.is_empty() {
+        return vec![];
+    }
     let allowed: Vec<_> = config
         .sources
         .iter()
         .filter_map(|s| s.repository.as_deref())
         .collect();
     let mut refs = BTreeMap::new();
-    let explicit = Regex::new(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:issues|pull)/(\d+)|(?:^|[^\w/])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(\d+)").unwrap();
-    for m in explicit.captures_iter(body) {
+    for m in EXPLICIT_REFERENCE.captures_iter(body) {
         let repo = m.get(1).or_else(|| m.get(3)).unwrap().as_str();
         let number = m
             .get(2)
@@ -76,8 +85,7 @@ pub fn references(body: &str, config: &Config, local: &str) -> Vec<Reference> {
             );
         }
     }
-    let qualified = Regex::new(r"(?i)(?:\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue|research(?:\s+(?:issue|line|unit|and independent form evidence))?)\b|研究线|研究问题|课题)\s*[:：]?\s*#(\d+)").unwrap();
-    for m in qualified.captures_iter(body) {
+    for m in QUALIFIED_REFERENCE.captures_iter(body) {
         let number = m[1].parse::<u64>().unwrap_or(0);
         if allowed.contains(&local) && number > 0 {
             refs.insert(
@@ -443,6 +451,92 @@ pub fn nyxid(config: &Config, input: NyxidDelivery) -> Result<Batch> {
         source: source.id.clone(),
         observed_at: input.observed_at,
         cursor: None,
+        complete: true,
+        events: vec![event],
+    })
+}
+
+/// A local CLI/agent reports an explicit state. This is not process detection,
+/// transcript scraping, an automatic model classification, or a remote write.
+pub fn session_report(
+    config: &Config,
+    source_id: &str,
+    generation: u64,
+    status: Status,
+    task: Option<Reference>,
+    at: DateTime<Utc>,
+    previous: Option<&Checkpoint>,
+) -> Result<Batch> {
+    let source = config
+        .sources
+        .iter()
+        .find(|s| s.id == source_id && s.kind == SourceKind::Session)
+        .ok_or_else(|| Error::Contract("local session source not registered".into()))?;
+    let binding = source
+        .runtime
+        .as_ref()
+        .ok_or_else(|| Error::Contract("local session lacks owner binding".into()))?;
+    require(
+        binding.publish && generation > 0,
+        "session projection not enabled or generation missing",
+    )?;
+    require(
+        matches!(
+            status,
+            Status::Working
+                | Status::Waiting
+                | Status::Ready
+                | Status::Succeeded
+                | Status::Failed
+                | Status::Cancelled
+                | Status::Unknown
+        ),
+        "invalid session state",
+    )?;
+    if let Some(head) = previous.and_then(|p| {
+        p.heads
+            .get(&format!("{}:{}", source.id, binding.resource_id))
+    }) {
+        require(
+            generation >= head.event.generation,
+            "session generation moved backward",
+        )?;
+        require(
+            generation > head.event.generation
+                || !head.event.status.is_terminal()
+                || status.is_terminal(),
+            "a settled session needs a new generation before working again",
+        )?;
+    }
+    let after = previous
+        .and_then(|p| p.sources.get(source_id))
+        .map_or(0, |s| s.cursor);
+    let sequence = after
+        .checked_add(1)
+        .ok_or_else(|| Error::Contract("session cursor overflow".into()))?;
+    let event = Event {
+        schema: EVENT_SCHEMA.into(),
+        id: format!("{}:{sequence}", binding.resource_id),
+        source: source.id.clone(),
+        subject: binding.resource_id.clone(),
+        generation,
+        sequence,
+        at,
+        kind: ActivityKind::Session,
+        status,
+        label: binding.public_label.clone(),
+        actor: Some(binding.actor.clone()),
+        url: None,
+        task,
+        references: vec![],
+    };
+    Ok(Batch {
+        source: source.id.clone(),
+        observed_at: at,
+        cursor: Some(Cursor {
+            after,
+            through: sequence,
+        }),
         complete: true,
         events: vec![event],
     })

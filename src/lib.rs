@@ -87,13 +87,22 @@ pub fn validate_config(config: &Config) -> Result<()> {
     let mut sources = BTreeSet::new();
     for s in &config.sources {
         require(
+            (15..=3600).contains(&s.poll_seconds)
+                && s.freshness_seconds
+                    .is_none_or(|n| (15..=7200).contains(&n) && n >= s.poll_seconds),
+            "invalid source cadence or freshness",
+        )?;
+        require(
             identifier(&s.id)
                 && sources.insert(&s.id)
                 && departments.contains(&s.department)
                 && text(&s.label, 256),
             "invalid source registration",
         )?;
-        if matches!(s.kind, SourceKind::Cma | SourceKind::Nyxid) {
+        if matches!(
+            s.kind,
+            SourceKind::Cma | SourceKind::Nyxid | SourceKind::Session
+        ) {
             let runtime = s
                 .runtime
                 .as_ref()
@@ -107,7 +116,7 @@ pub fn validate_config(config: &Config) -> Result<()> {
             validate_actor(&runtime.actor)?;
             require(
                 runtime.actor.kind
-                    == if s.kind == SourceKind::Cma {
+                    == if matches!(s.kind, SourceKind::Cma | SourceKind::Session) {
                         ActorKind::Agent
                     } else {
                         ActorKind::Automation
@@ -181,6 +190,31 @@ fn revision(event: &Event) -> (u64, u8, u64) {
     (event.generation, terminal, event.sequence)
 }
 
+fn merge_run_references(event: &mut Event, known: &Event, same_id: bool) -> Result<()> {
+    if same_id {
+        let mut a = event.clone();
+        let mut b = known.clone();
+        a.task = None;
+        b.task = None;
+        a.references.clear();
+        b.references.clear();
+        require(
+            a == b,
+            "conflicting run state; only unversioned PR associations may differ",
+        )?;
+    }
+    event.references.extend(known.references.iter().cloned());
+    event.references.extend(event.task.iter().cloned());
+    event.references.extend(known.task.iter().cloned());
+    event
+        .references
+        .sort_by(|a, b| (&a.repository, a.number).cmp(&(&b.repository, b.number)));
+    event.references.dedup();
+    event.references.truncate(30);
+    event.task = event.references.first().cloned();
+    Ok(())
+}
+
 fn validate_event(
     event: &Event,
     batch: &Batch,
@@ -212,7 +246,7 @@ fn validate_event(
         SourceKind::GithubPulls => ActivityKind::Contribution,
         SourceKind::GithubComments => ActivityKind::Discussion,
         SourceKind::GithubReviews => ActivityKind::Review,
-        SourceKind::Cma => ActivityKind::Session,
+        SourceKind::Cma | SourceKind::Session => ActivityKind::Session,
         SourceKind::Nyxid => ActivityKind::Delivery,
     };
     require(
@@ -269,10 +303,12 @@ fn validate_event(
             "runtime identity or label differs from owner binding",
         )?;
         require(
-            event.url.is_none() && event.task.is_none() && event.references.is_empty(),
+            event.url.is_none()
+                && (source.kind == SourceKind::Session
+                    || event.task.is_none() && event.references.is_empty()),
             "runtime wire content is not public metadata",
         )?;
-        if source.kind == SourceKind::Cma {
+        if matches!(source.kind, SourceKind::Cma | SourceKind::Session) {
             require(
                 event.subject == runtime.resource_id,
                 "foreign runtime resource",
@@ -309,6 +345,15 @@ fn validate_event(
         .iter()
         .filter_map(|s| s.repository.as_ref())
         .collect();
+    if source.kind == SourceKind::Session {
+        require(
+            event
+                .task
+                .as_ref()
+                .is_none_or(|r| r.number > 0 && allowed.contains(&r.repository)),
+            "unregistered session task",
+        )?;
+    }
     require(
         event.references.len() <= 30
             && event
@@ -398,6 +443,24 @@ pub fn reduce(
             .all(|(id, s)| registry.contains_key(id.as_str()) && s.observed_at <= state.as_of),
         "corrupt checkpoint source",
     )?;
+    for event in &state.recent {
+        let source = registry.get(event.source.as_str()).ok_or_else(|| {
+            Error::Contract("checkpoint feed contains an unregistered source".into())
+        })?;
+        let observed_at = state
+            .sources
+            .get(&event.source)
+            .ok_or_else(|| Error::Contract("checkpoint feed lacks a source observation".into()))?
+            .observed_at;
+        let batch = Batch {
+            source: source.id.clone(),
+            observed_at,
+            cursor: None,
+            complete: false,
+            events: vec![],
+        };
+        validate_event(event, &batch, source, config, state.as_of)?;
+    }
     let cutoff = input.as_of - TimeDelta::seconds(config.retention_seconds.into());
     state.heads.retain(|_, h| h.confirmed_at >= cutoff);
     state.recent.retain(|e| e.at >= cutoff);
@@ -427,10 +490,30 @@ pub fn reduce(
             )?;
         }
         require(
-            source.kind != SourceKind::Cma || batch.cursor.is_some(),
+            !matches!(source.kind, SourceKind::Cma | SourceKind::Session) || batch.cursor.is_some(),
             "CMA needs a durable replay cursor",
         )?;
-        for event in &batch.events {
+        for incoming_event in &batch.events {
+            let mut event = incoming_event.clone();
+            let key = format!("{}:{}", event.source, event.subject);
+            if source.kind == SourceKind::GithubActions {
+                if let Some(head) = state
+                    .heads
+                    .get(&key)
+                    .filter(|h| h.event.generation == event.generation)
+                {
+                    let same_id = head.event.id == event.id;
+                    merge_run_references(&mut event, &head.event, same_id)?;
+                }
+                if let Some(known) = state
+                    .recent
+                    .iter()
+                    .find(|e| e.source == event.source && e.id == event.id)
+                {
+                    merge_run_references(&mut event, known, true)?;
+                }
+            }
+            let event = &event;
             validate_event(event, batch, source, config, input.as_of)?;
             if let Some(c) = &batch.cursor {
                 require(
@@ -443,15 +526,21 @@ pub fn reduce(
             }
             if let Some(known) = state
                 .recent
-                .iter()
+                .iter_mut()
                 .find(|e| e.source == event.source && e.id == event.id)
             {
-                require(known == event, "conflicting duplicate event")?;
+                if source.kind == SourceKind::GithubActions {
+                    *known = event.clone();
+                } else {
+                    require(known == event, "conflicting duplicate event")?;
+                }
             } else {
                 state.recent.push(event.clone());
             }
-            let key = format!("{}:{}", event.source, event.subject);
             if let Some(old) = state.heads.get_mut(&key) {
+                if source.kind == SourceKind::GithubActions && old.event.id == event.id {
+                    old.event = event.clone();
+                }
                 let incoming = revision(event);
                 let prior = revision(&old.event);
                 if event.id == old.event.id {
@@ -491,6 +580,48 @@ pub fn reduce(
         state.heads.len() <= config.max_entities,
         "entity limit reached; no checkpoint committed",
     )?;
+    // GitHub removes PR associations from old run snapshots after a merge
+    // without changing updated_at. A positively observed run/PR connection stays
+    // true. Union that context independently of the run's lifecycle revision.
+    let mut run_links: BTreeMap<(String, String, u64), Vec<Reference>> = BTreeMap::new();
+    for event in state
+        .heads
+        .values()
+        .map(|h| &h.event)
+        .chain(state.recent.iter())
+    {
+        if registry[event.source.as_str()].kind == SourceKind::GithubActions {
+            let links = run_links
+                .entry((
+                    event.source.clone(),
+                    event.subject.clone(),
+                    event.generation,
+                ))
+                .or_default();
+            links.extend(event.references.iter().cloned());
+            links.extend(event.task.iter().cloned());
+        }
+    }
+    for event in state
+        .heads
+        .values_mut()
+        .map(|h| &mut h.event)
+        .chain(state.recent.iter_mut())
+    {
+        if let Some(links) = run_links.get(&(
+            event.source.clone(),
+            event.subject.clone(),
+            event.generation,
+        )) {
+            event.references.extend(links.iter().cloned());
+            event
+                .references
+                .sort_by(|a, b| (&a.repository, a.number).cmp(&(&b.repository, b.number)));
+            event.references.dedup();
+            event.references.truncate(30);
+            event.task = event.references.first().cloned();
+        }
+    }
     state
         .recent
         .sort_by(|a, b| (&b.at, &b.source, &b.id).cmp(&(&a.at, &a.source, &a.id)));
@@ -503,17 +634,32 @@ pub fn reduce(
 }
 
 pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
+    let validated = reduce(
+        config,
+        Some(state),
+        &Ingest {
+            as_of: state.as_of,
+            batches: vec![],
+        },
+    )?;
+    let state = &validated;
     validate_config(config)?;
     require(
         state.schema == STATE_SCHEMA && state.organization == config.organization.id,
         "invalid projection checkpoint",
     )?;
     let registry: BTreeMap<_, _> = config.sources.iter().map(|s| (s.id.as_str(), s)).collect();
-    let fresh_at = state.as_of - TimeDelta::seconds(config.freshness_seconds.into());
     let activity = |event: &Event, confirmed_at: DateTime<Utc>| -> Result<Activity> {
         let source = registry
             .get(event.source.as_str())
             .ok_or_else(|| Error::Contract("unregistered checkpoint event".into()))?;
+        let fresh_at = state.as_of
+            - TimeDelta::seconds(
+                source
+                    .freshness_seconds
+                    .unwrap_or(config.freshness_seconds)
+                    .into(),
+            );
         let clock = if event.kind == ActivityKind::Session {
             event.at
         } else {
@@ -573,6 +719,7 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
                 .filter(|department| **department != a.department)
             {
                 let h = Handoff {
+                    kind: RelationKind::Reference,
                     from: (*department).to_string(),
                     to: a.department.clone(),
                     activity: a.id.clone(),
@@ -595,11 +742,16 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         .departments
         .iter()
         .map(|d| {
-            let items: Vec<_> = activities
+            let mut items: Vec<_> = activities
                 .iter()
                 .filter(|a| a.department == d.id)
                 .cloned()
                 .collect();
+            items.sort_by_key(|a| {
+                !matches!(a.kind, ActivityKind::Automation | ActivityKind::Session)
+                    || !a.fresh
+                    || !a.status.is_active()
+            });
             let mut participants = BTreeMap::new();
             for item in &items {
                 if let Some(actor) = &item.actor {
@@ -622,8 +774,10 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
                         a.kind == ActivityKind::Session && a.fresh && a.status == Status::Working
                     })
                     .count(),
-                participants: participants.into_values().collect(),
-                activities: items,
+                observed_activities: items.len(),
+                activities_truncated: items.len() > 100,
+                participants: participants.into_values().take(32).collect(),
+                activities: items.into_iter().take(100).collect(),
             }
         })
         .collect();
@@ -637,6 +791,12 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         .iter()
         .map(|s| {
             let checkpoint = state.sources.get(&s.id);
+            let fresh_at = state.as_of
+                - TimeDelta::seconds(
+                    s.freshness_seconds
+                        .unwrap_or(config.freshness_seconds)
+                        .into(),
+                );
             SourceView {
                 id: s.id.clone(),
                 label: s.label.clone(),
@@ -647,6 +807,8 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
             }
         })
         .collect();
+    let handoffs_truncated = handoffs.len() > 500;
+    handoffs.truncate(500);
     Ok(View {
         schema: VIEW_SCHEMA.into(),
         organization: config.organization.clone(),
@@ -654,6 +816,7 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         departments,
         routes: config.routes.clone(),
         handoffs,
+        handoffs_truncated,
         recent,
         sources,
     })

@@ -29,6 +29,12 @@ identical events are idempotent. Reusing an id or entity revision for a differen
 payload is rejected. Different sources have no shared sequence or implied causal
 order.
 
+GitHub run/PR associations are an explicit exception to immutable event context:
+GitHub can remove them after a PR merges without changing the run's `updated_at`.
+The reducer retains the union of positively observed PR links for that run attempt,
+bounded to 30. The union is commutative and creates no new activity. All lifecycle
+fields and other payload fields remain subject to the duplicate-conflict check.
+
 GitHub run generation is `run_attempt`. Its sequence is the API `updated_at` in
 milliseconds, multiplied by 16, plus the workflow lifecycle rank. Native durable
 CMA `seq` supplies its sequence; `turn_sequence` fences successive turns. A
@@ -41,8 +47,10 @@ observations cannot move backward; occurrence times later than `as_of` are rejec
 A source batch is one transaction. Cursor advancement and accepted observations
 are committed together, and CMA page sequences must be contiguous including
 content events discarded by its adapter. A concurrent/stale page cannot advance
-the same cursor twice. Responsibility routes are static configuration; observed
-handoffs require source references to known tasks in different departments.
+the same cursor twice. Responsibility routes are static configuration. Observed
+links under `handoffs` carry `kind: reference` and require source references to known
+tasks in different departments. A citation is not promoted to a dispatch or transfer
+of responsibility.
 
 ## Presence, retention and gaps
 
@@ -62,6 +70,11 @@ it is not an eternal global event-id registry. A configured entity-limit overflo
 fails the whole transaction. Source pages are bounded and report coverage; an
 incomplete sample is never a complete organization census.
 
+Public department lists are capped at 100 activities and 32 participant labels;
+live automations/sessions appear first. `observed_activities` and
+`activities_truncated` retain the distinction between observation and presentation.
+The public reference list is capped at 500 and reports `handoffs_truncated`.
+
 The disk store uses an OS file lock, owner-only Unix files, write/fsync/rename and
 parent-directory fsync. The checkpoint is authoritative; the public view is a
 rebuildable projection. The two file renames are not a cross-file transaction. An
@@ -70,6 +83,15 @@ checkpoint. Local locking does not coordinate different machines: the deployment
 must provide one writer, or an external compare-and-swap store.
 
 ## Runtime wire adapters and validation scope
+
+Independent CLI sessions use a registered `session` source. `report` accepts only
+a status, generation and optional task in the registered public repositories. It
+obtains the next source cursor under the same checkpoint lock used by ingestion.
+Identity, model/tool label and public role text come from the owner's binding.
+The command reads no transcript, performs no process detection and transmits
+nothing. Callers must report actual lifecycle changes and confirm continued work
+before the lease expires. A stopped reporting process naturally becomes unknown.
+The generation must increase before a settled session can resume work.
 
 CMA import consumes a local wrapper containing `source`, `observed_at`, `after`
 and `items`; each native item has `agent_id`, `seq`, `appended_at`, `kind`. The
