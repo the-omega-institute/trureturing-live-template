@@ -29,6 +29,12 @@ identical events are idempotent. Reusing an id or entity revision for a differen
 payload is rejected. Different sources have no shared sequence or implied causal
 order.
 
+GitHub run/PR associations are an explicit exception to immutable event context:
+GitHub can remove them after a PR merges without changing the run's `updated_at`.
+The reducer retains the union of positively observed PR links for that run attempt,
+bounded to 30. The union is commutative and creates no new activity. All lifecycle
+fields and other payload fields remain subject to the duplicate-conflict check.
+
 GitHub run generation is `run_attempt`. Its sequence is the API `updated_at` in
 milliseconds, multiplied by 16, plus the workflow lifecycle rank. Native durable
 CMA `seq` supplies its sequence; `turn_sequence` fences successive turns. A

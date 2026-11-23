@@ -312,6 +312,41 @@ fn native_github_projection_preserves_execution_meaning_and_discards_bodies() {
 }
 
 #[test]
+fn github_clearing_a_runs_pr_association_does_not_change_its_state_or_erase_the_connection() {
+    let c = config();
+    let mut linked = event(10, Status::Working);
+    linked.task = Some(Reference {
+        repository: REPO.into(),
+        number: 42,
+    });
+    linked.references = vec![linked.task.clone().unwrap()];
+    let unlinked = event(10, Status::Working);
+    let done = event(20, Status::Succeeded);
+    let a = reduce(
+        &c,
+        None,
+        &ingest(vec![linked.clone(), unlinked.clone(), done.clone()]),
+    )
+    .unwrap();
+    let b = reduce(
+        &c,
+        None,
+        &ingest(vec![done, unlinked.clone(), linked.clone()]),
+    )
+    .unwrap();
+    assert_eq!(a, b);
+    assert_eq!(a.heads["ci:run/1"].event.status, Status::Succeeded);
+    assert_eq!(a.heads["ci:run/1"].event.task.as_ref().unwrap().number, 42);
+    assert_eq!(a.recent.len(), 2);
+    let first = reduce(&c, None, &ingest(vec![linked])).unwrap();
+    let second = reduce(&c, Some(&first), &ingest(vec![unlinked])).unwrap();
+    assert_eq!(first, second);
+    let mut contradiction = event(10, Status::Failed);
+    contradiction.id = first.heads["ci:run/1"].event.id.clone();
+    assert!(reduce(&c, Some(&first), &ingest(vec![contradiction])).is_err());
+}
+
+#[test]
 fn handoffs_need_explicit_references_and_bare_problem_numbers_do_not_link() {
     let c = config();
     let refs = adapters::references(

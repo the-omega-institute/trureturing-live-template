@@ -187,6 +187,31 @@ fn revision(event: &Event) -> (u64, u8, u64) {
     (event.generation, terminal, event.sequence)
 }
 
+fn merge_run_references(event: &mut Event, known: &Event, same_id: bool) -> Result<()> {
+    if same_id {
+        let mut a = event.clone();
+        let mut b = known.clone();
+        a.task = None;
+        b.task = None;
+        a.references.clear();
+        b.references.clear();
+        require(
+            a == b,
+            "conflicting run state; only unversioned PR associations may differ",
+        )?;
+    }
+    event.references.extend(known.references.iter().cloned());
+    event.references.extend(event.task.iter().cloned());
+    event.references.extend(known.task.iter().cloned());
+    event
+        .references
+        .sort_by(|a, b| (&a.repository, a.number).cmp(&(&b.repository, b.number)));
+    event.references.dedup();
+    event.references.truncate(30);
+    event.task = event.references.first().cloned();
+    Ok(())
+}
+
 fn validate_event(
     event: &Event,
     batch: &Batch,
@@ -404,6 +429,24 @@ pub fn reduce(
             .all(|(id, s)| registry.contains_key(id.as_str()) && s.observed_at <= state.as_of),
         "corrupt checkpoint source",
     )?;
+    for event in &state.recent {
+        let source = registry.get(event.source.as_str()).ok_or_else(|| {
+            Error::Contract("checkpoint feed contains an unregistered source".into())
+        })?;
+        let observed_at = state
+            .sources
+            .get(&event.source)
+            .ok_or_else(|| Error::Contract("checkpoint feed lacks a source observation".into()))?
+            .observed_at;
+        let batch = Batch {
+            source: source.id.clone(),
+            observed_at,
+            cursor: None,
+            complete: false,
+            events: vec![],
+        };
+        validate_event(event, &batch, source, config, state.as_of)?;
+    }
     let cutoff = input.as_of - TimeDelta::seconds(config.retention_seconds.into());
     state.heads.retain(|_, h| h.confirmed_at >= cutoff);
     state.recent.retain(|e| e.at >= cutoff);
@@ -436,7 +479,27 @@ pub fn reduce(
             source.kind != SourceKind::Cma || batch.cursor.is_some(),
             "CMA needs a durable replay cursor",
         )?;
-        for event in &batch.events {
+        for incoming_event in &batch.events {
+            let mut event = incoming_event.clone();
+            let key = format!("{}:{}", event.source, event.subject);
+            if source.kind == SourceKind::GithubActions {
+                if let Some(head) = state
+                    .heads
+                    .get(&key)
+                    .filter(|h| h.event.generation == event.generation)
+                {
+                    let same_id = head.event.id == event.id;
+                    merge_run_references(&mut event, &head.event, same_id)?;
+                }
+                if let Some(known) = state
+                    .recent
+                    .iter()
+                    .find(|e| e.source == event.source && e.id == event.id)
+                {
+                    merge_run_references(&mut event, known, true)?;
+                }
+            }
+            let event = &event;
             validate_event(event, batch, source, config, input.as_of)?;
             if let Some(c) = &batch.cursor {
                 require(
@@ -449,15 +512,21 @@ pub fn reduce(
             }
             if let Some(known) = state
                 .recent
-                .iter()
+                .iter_mut()
                 .find(|e| e.source == event.source && e.id == event.id)
             {
-                require(known == event, "conflicting duplicate event")?;
+                if source.kind == SourceKind::GithubActions {
+                    *known = event.clone();
+                } else {
+                    require(known == event, "conflicting duplicate event")?;
+                }
             } else {
                 state.recent.push(event.clone());
             }
-            let key = format!("{}:{}", event.source, event.subject);
             if let Some(old) = state.heads.get_mut(&key) {
+                if source.kind == SourceKind::GithubActions && old.event.id == event.id {
+                    old.event = event.clone();
+                }
                 let incoming = revision(event);
                 let prior = revision(&old.event);
                 if event.id == old.event.id {
@@ -497,6 +566,48 @@ pub fn reduce(
         state.heads.len() <= config.max_entities,
         "entity limit reached; no checkpoint committed",
     )?;
+    // GitHub removes PR associations from old run snapshots after a merge
+    // without changing updated_at. A positively observed run/PR connection stays
+    // true. Union that context independently of the run's lifecycle revision.
+    let mut run_links: BTreeMap<(String, String, u64), Vec<Reference>> = BTreeMap::new();
+    for event in state
+        .heads
+        .values()
+        .map(|h| &h.event)
+        .chain(state.recent.iter())
+    {
+        if registry[event.source.as_str()].kind == SourceKind::GithubActions {
+            let links = run_links
+                .entry((
+                    event.source.clone(),
+                    event.subject.clone(),
+                    event.generation,
+                ))
+                .or_default();
+            links.extend(event.references.iter().cloned());
+            links.extend(event.task.iter().cloned());
+        }
+    }
+    for event in state
+        .heads
+        .values_mut()
+        .map(|h| &mut h.event)
+        .chain(state.recent.iter_mut())
+    {
+        if let Some(links) = run_links.get(&(
+            event.source.clone(),
+            event.subject.clone(),
+            event.generation,
+        )) {
+            event.references.extend(links.iter().cloned());
+            event
+                .references
+                .sort_by(|a, b| (&a.repository, a.number).cmp(&(&b.repository, b.number)));
+            event.references.dedup();
+            event.references.truncate(30);
+            event.task = event.references.first().cloned();
+        }
+    }
     state
         .recent
         .sort_by(|a, b| (&b.at, &b.source, &b.id).cmp(&(&a.at, &a.source, &a.id)));
@@ -509,6 +620,15 @@ pub fn reduce(
 }
 
 pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
+    let validated = reduce(
+        config,
+        Some(state),
+        &Ingest {
+            as_of: state.as_of,
+            batches: vec![],
+        },
+    )?;
+    let state = &validated;
     validate_config(config)?;
     require(
         state.schema == STATE_SCHEMA && state.organization == config.organization.id,
