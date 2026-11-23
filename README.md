@@ -45,6 +45,14 @@ its last observation and becomes stale; a total outage exits nonzero and preserv
 both published files. The caller should retry with normal backoff, retaining the
 original process/job handle while a job remains active.
 
+Each source can set `poll_seconds` (default 60) and `freshness_seconds` (otherwise
+the organization default). Busy research and coordinator sources can update every
+minute while infrequently changing tools are checked every five minutes. A private
+HTTP cache beside the checkpoint keeps ETags and bounded native responses. Requests
+still reach GitHub; authenticated 304 responses avoid primary API quota charges.
+This cache is an optimization, never the public view. Do not publish it. Collection
+statistics separate total requests from responses that were not 304.
+
 ## Meaning of the view
 
 - GitHub accounts are participants, not independently identified AI sessions.
@@ -53,9 +61,10 @@ original process/job handle while a job remains active.
   lifecycle event. Polling an old event does not renew a session's presence.
 - A successful workflow is successful execution. A merged PR is a merged
   contribution. Neither is promoted to a proven mathematical result or sent email.
-- Configured `routes` describe responsibilities. `handoffs` require an explicit
-  source reference to a task observed in another department. They are not inferred
-  from co-occurrence or decorative map layout.
+- Configured `routes` describe responsibilities. Entries in `handoffs` currently
+  carry `kind: reference`: an explicit source link to a task observed in another
+  department. They establish a research connection, not a private dispatch, direct
+  message or transfer of responsibility.
 
 ## Runtime imports
 

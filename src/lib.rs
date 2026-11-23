@@ -87,6 +87,12 @@ pub fn validate_config(config: &Config) -> Result<()> {
     let mut sources = BTreeSet::new();
     for s in &config.sources {
         require(
+            (15..=3600).contains(&s.poll_seconds)
+                && s.freshness_seconds
+                    .is_none_or(|n| (15..=7200).contains(&n) && n >= s.poll_seconds),
+            "invalid source cadence or freshness",
+        )?;
+        require(
             identifier(&s.id)
                 && sources.insert(&s.id)
                 && departments.contains(&s.department)
@@ -509,11 +515,17 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         "invalid projection checkpoint",
     )?;
     let registry: BTreeMap<_, _> = config.sources.iter().map(|s| (s.id.as_str(), s)).collect();
-    let fresh_at = state.as_of - TimeDelta::seconds(config.freshness_seconds.into());
     let activity = |event: &Event, confirmed_at: DateTime<Utc>| -> Result<Activity> {
         let source = registry
             .get(event.source.as_str())
             .ok_or_else(|| Error::Contract("unregistered checkpoint event".into()))?;
+        let fresh_at = state.as_of
+            - TimeDelta::seconds(
+                source
+                    .freshness_seconds
+                    .unwrap_or(config.freshness_seconds)
+                    .into(),
+            );
         let clock = if event.kind == ActivityKind::Session {
             event.at
         } else {
@@ -573,6 +585,7 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
                 .filter(|department| **department != a.department)
             {
                 let h = Handoff {
+                    kind: RelationKind::Reference,
                     from: (*department).to_string(),
                     to: a.department.clone(),
                     activity: a.id.clone(),
@@ -595,11 +608,16 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         .departments
         .iter()
         .map(|d| {
-            let items: Vec<_> = activities
+            let mut items: Vec<_> = activities
                 .iter()
                 .filter(|a| a.department == d.id)
                 .cloned()
                 .collect();
+            items.sort_by_key(|a| {
+                !matches!(a.kind, ActivityKind::Automation | ActivityKind::Session)
+                    || !a.fresh
+                    || !a.status.is_active()
+            });
             let mut participants = BTreeMap::new();
             for item in &items {
                 if let Some(actor) = &item.actor {
@@ -622,8 +640,10 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
                         a.kind == ActivityKind::Session && a.fresh && a.status == Status::Working
                     })
                     .count(),
-                participants: participants.into_values().collect(),
-                activities: items,
+                observed_activities: items.len(),
+                activities_truncated: items.len() > 100,
+                participants: participants.into_values().take(32).collect(),
+                activities: items.into_iter().take(100).collect(),
             }
         })
         .collect();
@@ -637,6 +657,12 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         .iter()
         .map(|s| {
             let checkpoint = state.sources.get(&s.id);
+            let fresh_at = state.as_of
+                - TimeDelta::seconds(
+                    s.freshness_seconds
+                        .unwrap_or(config.freshness_seconds)
+                        .into(),
+                );
             SourceView {
                 id: s.id.clone(),
                 label: s.label.clone(),
@@ -647,6 +673,8 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
             }
         })
         .collect();
+    let handoffs_truncated = handoffs.len() > 500;
+    handoffs.truncate(500);
     Ok(View {
         schema: VIEW_SCHEMA.into(),
         organization: config.organization.clone(),
@@ -654,6 +682,7 @@ pub fn project(config: &Config, state: &Checkpoint) -> Result<View> {
         departments,
         routes: config.routes.clone(),
         handoffs,
+        handoffs_truncated,
         recent,
         sources,
     })

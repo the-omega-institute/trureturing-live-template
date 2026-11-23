@@ -4,7 +4,14 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::LazyLock};
+
+static EXPLICIT_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:issues|pull)/(\d+)|(?:^|[^\w/])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(\d+)").unwrap()
+});
+static QUALIFIED_REFERENCE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue|research(?:\s+(?:issue|line|unit|and independent form evidence))?)\b|研究线|研究问题|课题)\s*[:：]?\s*#(\d+)").unwrap()
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -50,14 +57,16 @@ fn account(row: &Value) -> Option<Actor> {
 }
 
 pub fn references(body: &str, config: &Config, local: &str) -> Vec<Reference> {
+    if body.is_empty() {
+        return vec![];
+    }
     let allowed: Vec<_> = config
         .sources
         .iter()
         .filter_map(|s| s.repository.as_deref())
         .collect();
     let mut refs = BTreeMap::new();
-    let explicit = Regex::new(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:issues|pull)/(\d+)|(?:^|[^\w/])([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(\d+)").unwrap();
-    for m in explicit.captures_iter(body) {
+    for m in EXPLICIT_REFERENCE.captures_iter(body) {
         let repo = m.get(1).or_else(|| m.get(3)).unwrap().as_str();
         let number = m
             .get(2)
@@ -76,8 +85,7 @@ pub fn references(body: &str, config: &Config, local: &str) -> Vec<Reference> {
             );
         }
     }
-    let qualified = Regex::new(r"(?i)(?:\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|issue|research(?:\s+(?:issue|line|unit|and independent form evidence))?)\b|研究线|研究问题|课题)\s*[:：]?\s*#(\d+)").unwrap();
-    for m in qualified.captures_iter(body) {
+    for m in QUALIFIED_REFERENCE.captures_iter(body) {
         let number = m[1].parse::<u64>().unwrap_or(0);
         if allowed.contains(&local) && number > 0 {
             refs.insert(

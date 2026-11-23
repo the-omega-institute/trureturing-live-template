@@ -41,8 +41,10 @@ observations cannot move backward; occurrence times later than `as_of` are rejec
 A source batch is one transaction. Cursor advancement and accepted observations
 are committed together, and CMA page sequences must be contiguous including
 content events discarded by its adapter. A concurrent/stale page cannot advance
-the same cursor twice. Responsibility routes are static configuration; observed
-handoffs require source references to known tasks in different departments.
+the same cursor twice. Responsibility routes are static configuration. Observed
+links under `handoffs` carry `kind: reference` and require source references to known
+tasks in different departments. A citation is not promoted to a dispatch or transfer
+of responsibility.
 
 ## Presence, retention and gaps
 
@@ -61,6 +63,11 @@ entities. Deduplication conflict detection covers retained heads and recent even
 it is not an eternal global event-id registry. A configured entity-limit overflow
 fails the whole transaction. Source pages are bounded and report coverage; an
 incomplete sample is never a complete organization census.
+
+Public department lists are capped at 100 activities and 32 participant labels;
+live automations/sessions appear first. `observed_activities` and
+`activities_truncated` retain the distinction between observation and presentation.
+The public reference list is capped at 500 and reports `handoffs_truncated`.
 
 The disk store uses an OS file lock, owner-only Unix files, write/fsync/rename and
 parent-directory fsync. The checkpoint is authoritative; the public view is a
