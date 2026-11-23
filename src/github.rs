@@ -51,14 +51,20 @@ struct Reader {
 }
 impl Reader {
     fn get(&mut self, path: &str, query: &[(&str, &str)]) -> Result<(Value, bool)> {
-        if self
-            .budget
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
-                (n < 80).then_some(n + 1)
-            })
-            .is_err()
-        {
-            return Err(Error::Source("collection request budget reached".into()));
+        let mut reserved = self.budget.load(Ordering::Relaxed);
+        loop {
+            if reserved >= 80 {
+                return Err(Error::Source("collection request budget reached".into()));
+            }
+            match self.budget.compare_exchange_weak(
+                reserved,
+                reserved + 1,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(current) => reserved = current,
+            }
         }
         self.requests += 1;
         let cache_key = serde_json::to_string(&(path, query))?;

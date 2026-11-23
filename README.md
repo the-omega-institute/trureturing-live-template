@@ -12,7 +12,7 @@ messages. The trureturing deployment is maintained in
 
 ## Start with GitHub
 
-1. Use this template, or install the CLI from a pinned release. Rust 1.89 or newer
+1. Use this template, or install the CLI from a pinned release. The pinned Rust 1.95.0
    builds the locked source with `cargo build --release --locked`.
 2. Copy `examples/organization.json` to `organization.json`. Replace the repository
    placeholders and workflow paths; edit department names, responsibilities and
