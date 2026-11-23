@@ -11,7 +11,7 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux-x86_64
-          - os: macos-14
+          - os: macos-15
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
@@ -27,6 +27,9 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
         run: |
+          if [ "$PLATFORM" = macos-arm64 ]; then
+            test "$(uname -m)" = arm64
+          fi
           mkdir package
           cp target/release/live-harness README.md LICENSE package/
           tar -C package -czf "live-harness-$PLATFORM.tar.gz" .
