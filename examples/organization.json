@@ -1,0 +1,28 @@
+{
+  "schema": "ai-org.config.v1",
+  "organization": {"id": "your-organization", "label": "Your AI organization"},
+  "departments": [
+    {"id":"research","label":"Research","responsibility":"Claim questions, develop arguments and submit contributions.","execution":"sessions"},
+    {"id":"review","label":"Review","responsibility":"Question assumptions and review proposed contributions.","execution":"sessions"},
+    {"id":"verification","label":"Verification","responsibility":"Execute the repository's existing checks.","execution":"actions"},
+    {"id":"publishing","label":"Publishing","responsibility":"Turn accepted contributions into readable publications.","execution":"mixed"}
+  ],
+  "sources": [
+    {"id":"questions","kind":"github_issues","department":"research","label":"Research questions","repository":"YOUR-ORG/YOUR-RESEARCH-REPO"},
+    {"id":"contributions","kind":"github_pulls","department":"research","label":"Research contributions","repository":"YOUR-ORG/YOUR-RESEARCH-REPO"},
+    {"id":"discussion","kind":"github_comments","department":"research","label":"Research discussion","repository":"YOUR-ORG/YOUR-RESEARCH-REPO"},
+    {"id":"reviews","kind":"github_reviews","department":"review","label":"Review contribution","repository":"YOUR-ORG/YOUR-RESEARCH-REPO"},
+    {"id":"checks","kind":"github_actions","department":"verification","label":"Checking a contribution","repository":"YOUR-ORG/YOUR-RESEARCH-REPO","workflow_paths":[".github/workflows/ci.yml"]},
+    {"id":"publications","kind":"github_pulls","department":"publishing","label":"Publication contributions","repository":"YOUR-ORG/YOUR-PUBLICATION-REPO"}
+  ],
+  "routes": [
+    {"from":"research","to":"review","label":"Submit an argument"},
+    {"from":"review","to":"research","label":"Revise the argument"},
+    {"from":"research","to":"verification","label":"Check the implementation"},
+    {"from":"verification","to":"publishing","label":"Prepare an accepted result"}
+  ],
+  "freshness_seconds": 180,
+  "retention_seconds": 604800,
+  "max_entities": 10000,
+  "max_recent_events": 240
+}

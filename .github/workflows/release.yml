@@ -1,0 +1,54 @@
+name: Publish Rust foundation
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+          - os: macos-14
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: ./check.sh
+      - run: cargo build --locked --release
+      - name: Package
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir package
+          cp target/release/live-harness README.md LICENSE package/
+          tar -C package -czf "live-harness-$PLATFORM.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-harness-${{ matrix.platform }}
+          path: live-harness-*.tar.gz
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: release
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd release
+          sha256sum live-harness-*.tar.gz > SHA256SUMS
+          gh release create "$RELEASE_TAG" --verify-tag --title "Live harness $RELEASE_TAG" --notes "Reusable Rust event foundation. No UI is included." live-harness-*.tar.gz SHA256SUMS
