@@ -68,6 +68,35 @@ statistics separate total requests from responses that were not 304.
 
 ## Runtime imports
 
+Independent Codex / Claude / AGY / heca sessions can use `report` without running
+inside CMA. Add a source such as the following to your organization's `sources`:
+
+```json
+{"id":"researcher-a","kind":"session","department":"research","label":"Research seat A",
+ "runtime":{"resource_id":"your-private-session-binding",
+ "actor":{"id":"researcher-a","label":"Researcher A","kind":"agent","tool":"Codex"},
+ "public_label":"Developing the current proof","publish":true}}
+```
+
+The session's own integration reports the state it actually knows. `report`
+generates the next cursor under the checkpoint lock, so separate command
+invocations recover consistently. While work continues, emit a fresh `working`
+report before the configured lease expires; emit `waiting`, `succeeded`, `failed`
+or `cancelled` when that phase changes. A settled generation cannot work again;
+start a new generation for a new turn/run. The command does not inspect a process
+or infer that an open terminal is doing research.
+
+```sh
+live-harness report --config organization.json --source researcher-a \
+  --generation 1 --status working --task YOUR-ORG/YOUR-RESEARCH-REPO#42 \
+  --state .live-state/checkpoint.json --output public/organization.json
+```
+
+Private bindings stay in the local checkpoint. Only the owner-approved public
+role, tool, status and registered public task appear in the output. Connect the
+output through your deployment's authorized transport; this command does not send
+it to GitHub, a public server or any other person.
+
 Runtime imports operate on **owner-supplied local files**. The harness does not
 discover sessions, request CMA/NyxID credentials, connect to private endpoints or
 publish transcripts. Explicitly register a `cma` or `nyxid` source with its resource

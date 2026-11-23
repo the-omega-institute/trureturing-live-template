@@ -455,3 +455,89 @@ pub fn nyxid(config: &Config, input: NyxidDelivery) -> Result<Batch> {
         events: vec![event],
     })
 }
+
+/// A local CLI/agent reports an explicit state. This is not process detection,
+/// transcript scraping, an automatic model classification, or a remote write.
+pub fn session_report(
+    config: &Config,
+    source_id: &str,
+    generation: u64,
+    status: Status,
+    task: Option<Reference>,
+    at: DateTime<Utc>,
+    previous: Option<&Checkpoint>,
+) -> Result<Batch> {
+    let source = config
+        .sources
+        .iter()
+        .find(|s| s.id == source_id && s.kind == SourceKind::Session)
+        .ok_or_else(|| Error::Contract("local session source not registered".into()))?;
+    let binding = source
+        .runtime
+        .as_ref()
+        .ok_or_else(|| Error::Contract("local session lacks owner binding".into()))?;
+    require(
+        binding.publish && generation > 0,
+        "session projection not enabled or generation missing",
+    )?;
+    require(
+        matches!(
+            status,
+            Status::Working
+                | Status::Waiting
+                | Status::Ready
+                | Status::Succeeded
+                | Status::Failed
+                | Status::Cancelled
+                | Status::Unknown
+        ),
+        "invalid session state",
+    )?;
+    if let Some(head) = previous.and_then(|p| {
+        p.heads
+            .get(&format!("{}:{}", source.id, binding.resource_id))
+    }) {
+        require(
+            generation >= head.event.generation,
+            "session generation moved backward",
+        )?;
+        require(
+            generation > head.event.generation
+                || !head.event.status.is_terminal()
+                || status.is_terminal(),
+            "a settled session needs a new generation before working again",
+        )?;
+    }
+    let after = previous
+        .and_then(|p| p.sources.get(source_id))
+        .map_or(0, |s| s.cursor);
+    let sequence = after
+        .checked_add(1)
+        .ok_or_else(|| Error::Contract("session cursor overflow".into()))?;
+    let event = Event {
+        schema: EVENT_SCHEMA.into(),
+        id: format!("{}:{sequence}", binding.resource_id),
+        source: source.id.clone(),
+        subject: binding.resource_id.clone(),
+        generation,
+        sequence,
+        at,
+        kind: ActivityKind::Session,
+        status,
+        label: binding.public_label.clone(),
+        actor: Some(binding.actor.clone()),
+        url: None,
+        task,
+        references: vec![],
+    };
+    Ok(Batch {
+        source: source.id.clone(),
+        observed_at: at,
+        cursor: Some(Cursor {
+            after,
+            through: sequence,
+        }),
+        complete: true,
+        events: vec![event],
+    })
+}

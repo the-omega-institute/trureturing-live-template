@@ -99,7 +99,10 @@ pub fn validate_config(config: &Config) -> Result<()> {
                 && text(&s.label, 256),
             "invalid source registration",
         )?;
-        if matches!(s.kind, SourceKind::Cma | SourceKind::Nyxid) {
+        if matches!(
+            s.kind,
+            SourceKind::Cma | SourceKind::Nyxid | SourceKind::Session
+        ) {
             let runtime = s
                 .runtime
                 .as_ref()
@@ -113,7 +116,7 @@ pub fn validate_config(config: &Config) -> Result<()> {
             validate_actor(&runtime.actor)?;
             require(
                 runtime.actor.kind
-                    == if s.kind == SourceKind::Cma {
+                    == if matches!(s.kind, SourceKind::Cma | SourceKind::Session) {
                         ActorKind::Agent
                     } else {
                         ActorKind::Automation
@@ -243,7 +246,7 @@ fn validate_event(
         SourceKind::GithubPulls => ActivityKind::Contribution,
         SourceKind::GithubComments => ActivityKind::Discussion,
         SourceKind::GithubReviews => ActivityKind::Review,
-        SourceKind::Cma => ActivityKind::Session,
+        SourceKind::Cma | SourceKind::Session => ActivityKind::Session,
         SourceKind::Nyxid => ActivityKind::Delivery,
     };
     require(
@@ -300,10 +303,12 @@ fn validate_event(
             "runtime identity or label differs from owner binding",
         )?;
         require(
-            event.url.is_none() && event.task.is_none() && event.references.is_empty(),
+            event.url.is_none()
+                && (source.kind == SourceKind::Session
+                    || event.task.is_none() && event.references.is_empty()),
             "runtime wire content is not public metadata",
         )?;
-        if source.kind == SourceKind::Cma {
+        if matches!(source.kind, SourceKind::Cma | SourceKind::Session) {
             require(
                 event.subject == runtime.resource_id,
                 "foreign runtime resource",
@@ -340,6 +345,15 @@ fn validate_event(
         .iter()
         .filter_map(|s| s.repository.as_ref())
         .collect();
+    if source.kind == SourceKind::Session {
+        require(
+            event
+                .task
+                .as_ref()
+                .is_none_or(|r| r.number > 0 && allowed.contains(&r.repository)),
+            "unregistered session task",
+        )?;
+    }
     require(
         event.references.len() <= 30
             && event
@@ -476,7 +490,7 @@ pub fn reduce(
             )?;
         }
         require(
-            source.kind != SourceKind::Cma || batch.cursor.is_some(),
+            !matches!(source.kind, SourceKind::Cma | SourceKind::Session) || batch.cursor.is_some(),
             "CMA needs a durable replay cursor",
         )?;
         for incoming_event in &batch.events {

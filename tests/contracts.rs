@@ -485,6 +485,82 @@ fn gateway_delivery_never_becomes_agent_completion_or_presence() {
 }
 
 #[test]
+fn independent_session_reports_keep_roles_tasks_and_liveness_separate_from_ci() {
+    let mut c = runtime_config();
+    c.sources[3].kind = SourceKind::Session;
+    let task = Some(Reference {
+        repository: REPO.into(),
+        number: 42,
+    });
+    let first =
+        adapters::session_report(&c, "cma", 1, Status::Working, task.clone(), at(), None).unwrap();
+    let state = reduce(
+        &c,
+        None,
+        &Ingest {
+            as_of: at(),
+            batches: vec![first],
+        },
+    )
+    .unwrap();
+    let view = project(&c, &state).unwrap();
+    assert_eq!(view.departments[0].running_sessions, 1);
+    assert_eq!(view.departments[0].running_automations, 0);
+    assert_eq!(view.departments[0].activities[0].task, task);
+    assert!(
+        !serde_json::to_string(&view)
+            .unwrap()
+            .contains("private-resource")
+    );
+    let done = adapters::session_report(&c, "cma", 1, Status::Succeeded, None, at(), Some(&state))
+        .unwrap();
+    let settled = reduce(
+        &c,
+        Some(&state),
+        &Ingest {
+            as_of: at(),
+            batches: vec![done],
+        },
+    )
+    .unwrap();
+    assert!(
+        adapters::session_report(&c, "cma", 1, Status::Working, None, at(), Some(&settled))
+            .is_err()
+    );
+    let next = adapters::session_report(&c, "cma", 2, Status::Working, None, at(), Some(&settled))
+        .unwrap();
+    let current = reduce(
+        &c,
+        Some(&settled),
+        &Ingest {
+            as_of: at(),
+            batches: vec![next],
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        project(&c, &current).unwrap().departments[0].running_sessions,
+        1
+    );
+    let future = reduce(
+        &c,
+        Some(&current),
+        &Ingest {
+            as_of: at() + TimeDelta::seconds(181),
+            batches: vec![],
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        project(&c, &future).unwrap().departments[0].running_sessions,
+        0
+    );
+    let mut corrupt = state;
+    corrupt.recent[0].label = "unapproved public label".into();
+    assert!(project(&c, &corrupt).is_err());
+}
+
+#[test]
 fn bounded_state_expires_without_resurrecting_old_observations() {
     let mut c = config();
     c.max_entities = 1;

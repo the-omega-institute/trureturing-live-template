@@ -84,6 +84,15 @@ must provide one writer, or an external compare-and-swap store.
 
 ## Runtime wire adapters and validation scope
 
+Independent CLI sessions use a registered `session` source. `report` accepts only
+a status, generation and optional task in the registered public repositories. It
+obtains the next source cursor under the same checkpoint lock used by ingestion.
+Identity, model/tool label and public role text come from the owner's binding.
+The command reads no transcript, performs no process detection and transmits
+nothing. Callers must report actual lifecycle changes and confirm continued work
+before the lease expires. A stopped reporting process naturally becomes unknown.
+The generation must increase before a settled session can resume work.
+
 CMA import consumes a local wrapper containing `source`, `observed_at`, `after`
 and `items`; each native item has `agent_id`, `seq`, `appended_at`, `kind`. The
 adapter permits only the configured resource. Recognized lifecycle records include

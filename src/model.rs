@@ -95,6 +95,7 @@ pub enum SourceKind {
     GithubReviews,
     Cma,
     Nyxid,
+    Session,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
