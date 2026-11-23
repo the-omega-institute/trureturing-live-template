@@ -1,6 +1,6 @@
 {
   "schema": "ai-org.foundation-template.v1",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mechanism": ["src/", "tests/", "Cargo.toml", "Cargo.lock", "docs/CONTRACT.md"],
   "organization_owned": ["organization.json", ".live-state/", "public/", "ui/"],
   "public_contract": "ai-org.live.v1",

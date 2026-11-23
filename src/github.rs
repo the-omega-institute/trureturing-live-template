@@ -3,7 +3,7 @@ use crate::{
     adapters::{self, GithubObservation, RepositoryVisibility},
     model::*,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -39,6 +39,36 @@ pub struct CachedResponse {
     etag: String,
     value: Value,
     complete: bool,
+}
+
+fn source_poll_key(id: &str) -> String {
+    serde_json::to_string(&("__source_poll", id)).expect("string tuple serialization")
+}
+
+/// Cadence uses the previous collection start; freshness still uses the actual
+/// successful observation time. Allow 500 ms of scheduler/launch jitter.
+pub fn poll_due(
+    source: &Source,
+    cache: &ReaderCache,
+    previous: Option<&Checkpoint>,
+    at: DateTime<Utc>,
+) -> bool {
+    if source.runtime.is_some() {
+        return false;
+    }
+    let started = cache
+        .get(&source_poll_key(&source.id))
+        .and_then(|entry| serde_json::from_value::<DateTime<Utc>>(entry.value.clone()).ok())
+        .filter(|started| *started <= at);
+    let last = started.or_else(|| {
+        previous
+            .and_then(|p| p.sources.get(&source.id))
+            .map(|s| s.observed_at)
+    });
+    last.is_none_or(|last| {
+        at.signed_duration_since(last).num_milliseconds()
+            >= i64::from(source.poll_seconds) * 1000 - 500
+    })
 }
 
 struct Reader {
@@ -247,18 +277,7 @@ pub fn collect(
     let mut groups: BTreeMap<&str, Vec<&Source>> = BTreeMap::new();
     let started_at = Utc::now();
     for source in &config.sources {
-        if source.runtime.is_some() {
-            continue;
-        }
-        if previous
-            .and_then(|p| p.sources.get(&source.id))
-            .is_some_and(|prior| {
-                started_at
-                    .signed_duration_since(prior.observed_at)
-                    .num_seconds()
-                    < i64::from(source.poll_seconds)
-            })
-        {
+        if !poll_due(source, &cache, previous, started_at) {
             continue;
         }
         groups
@@ -364,6 +383,16 @@ pub fn collect(
     }
     batches.sort_by(|a, b| a.source.cmp(&b.source));
     failures.sort_by(|a, b| a.source.cmp(&b.source));
+    for batch in &batches {
+        cache.insert(
+            source_poll_key(&batch.source),
+            CachedResponse {
+                etag: String::new(),
+                value: serde_json::to_value(started_at)?,
+                complete: true,
+            },
+        );
+    }
     if attempted > 0 && batches.is_empty() {
         return Err(Error::Source(
             "no current source readings; existing checkpoint retained".into(),
