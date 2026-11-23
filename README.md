@@ -52,6 +52,9 @@ HTTP cache beside the checkpoint keeps ETags and bounded native responses. Reque
 still reach GitHub; authenticated 304 responses avoid primary API quota charges.
 This cache is an optimization, never the public view. Do not publish it. Collection
 statistics separate total requests from responses that were not 304.
+Cadence is measured from the previous collection's start, with 500 ms of launch
+jitter tolerance. Request latency does not double a one-minute worker's interval;
+data freshness continues to use each source's actual successful observation time.
 
 ## Meaning of the view
 

@@ -312,6 +312,50 @@ fn native_github_projection_preserves_execution_meaning_and_discards_bodies() {
 }
 
 #[test]
+fn slow_requests_do_not_turn_a_minute_cadence_into_two_minutes() {
+    let c = config();
+    let mut input = ingest(vec![event(10, Status::Working)]);
+    input.as_of = at() + TimeDelta::seconds(20);
+    input.batches[0].observed_at = input.as_of;
+    let checkpoint = reduce(&c, None, &input).unwrap();
+    let key = serde_json::to_string(&("__source_poll", "ci")).unwrap();
+    let mut cache = live_harness::github::ReaderCache::new();
+    cache.insert(
+        key,
+        serde_json::from_value(json!({"etag":"","value":at(),"complete":true})).unwrap(),
+    );
+    assert!(!live_harness::github::poll_due(
+        &c.sources[0],
+        &cache,
+        Some(&checkpoint),
+        at() + TimeDelta::seconds(30)
+    ));
+    assert!(live_harness::github::poll_due(
+        &c.sources[0],
+        &cache,
+        Some(&checkpoint),
+        at() + TimeDelta::seconds(60)
+    ));
+    assert_eq!(
+        checkpoint.sources["ci"].observed_at,
+        at() + TimeDelta::seconds(20)
+    );
+    // A cold cache conservatively falls back to the last actual source read.
+    assert!(!live_harness::github::poll_due(
+        &c.sources[0],
+        &Default::default(),
+        Some(&checkpoint),
+        at() + TimeDelta::seconds(60)
+    ));
+    assert!(live_harness::github::poll_due(
+        &c.sources[0],
+        &Default::default(),
+        Some(&checkpoint),
+        at() + TimeDelta::seconds(80)
+    ));
+}
+
+#[test]
 fn github_clearing_a_runs_pr_association_does_not_change_its_state_or_erase_the_connection() {
     let c = config();
     let mut linked = event(10, Status::Working);
