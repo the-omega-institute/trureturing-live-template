@@ -478,16 +478,7 @@ function createCell(d, index) {
   button.append(hexShellSVG(), content);
 
   button.addEventListener('click', () => selectDepartment(d.id, true, true));
-  button.addEventListener('pointerenter', () => {
-    state.hovered = d.id;
-    highlightRoutes(d.id);
-    updateHoverHint(d.id);
-  });
-  button.addEventListener('pointerleave', () => {
-    state.hovered = null;
-    highlightRoutes(state.selected);
-    updateHoverHint(state.selected);
-  });
+  button.addEventListener('pointerenter', () => previewDepartment(d.id));
   button.addEventListener('keydown', event => {
     if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) {
       event.preventDefault();
@@ -500,6 +491,26 @@ function createCell(d, index) {
     }
   });
   return { button, status, title, mode, seats };
+}
+
+function previewDepartment(id) {
+  if (!department(id) || state.focused) return;
+  state.hovered = id;
+  if (state.selected === id) {
+    highlightRoutes(id);
+    updateHoverHint(id);
+    return;
+  }
+  state.selected = id;
+  for (const [deptId, cell] of state.cells) {
+    cell.button.setAttribute('aria-pressed', String(deptId === id));
+  }
+  for (const btn of document.querySelectorAll('[data-method-department]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.methodDepartment === id));
+  }
+  highlightRoutes(id);
+  updateHoverHint(id);
+  renderDepartment();
 }
 
 function updateHoverHint(id) {
@@ -689,25 +700,73 @@ function renderRoutes() {
   }
   svg.append(haloGroup);
 
-  // Configured responsibility routes
+  // Clean orthogonal architectural conduits (zero chaotic diagonal crossings)
   const routePairs = new Set((view()?.routes || []).map(r => `${r.from}|${r.to}`));
-  for (const route of view()?.routes || []) {
-    const p = state.positions.get(route.from);
-    const q = state.positions.get(route.to);
-    if (!p || !q) continue;
-    const sameRowFar = Math.abs(p[1] - q[1]) < 10 && Math.abs(p[0] - q[0]) > 420;
+  const drawnUndirected = new Set();
+  const orthogonalRoute = (from, to) => {
+    const p = state.positions.get(from);
+    const q = state.positions.get(to);
+    if (!p || !q) return null;
+    const sameRow = Math.abs(p[1] - q[1]) < 10;
+    const sameRowFar = sameRow && Math.abs(p[0] - q[0]) > 420;
     const returnToTop = p[1] > 500 && q[1] < 200;
-    let curve;
+    const topToMid = p[1] < 200 && q[1] > 200 && q[1] < 500;
+    const midToBottom = p[1] > 200 && p[1] < 500 && q[1] > 500;
     if (returnToTop) {
-      const dPath = `M ${p[0]} ${p[1]} C 44 580, 44 138, ${q[0] - 90} ${q[1]} L ${q[0]} ${q[1]}`;
-      curve = { d: dPath, mid: [66, 364], angle: -90 };
-    } else if (sameRowFar) {
-      const c = [(p[0] + q[0]) / 2, p[1] + 136];
-      curve = { d: `M ${p[0]} ${p[1]} Q ${c[0]} ${c[1]} ${q[0]} ${q[1]}`, mid: quadPoint(p, c, q, 0.5), angle: quadTangent(p, c, q, 0.5), isLoop: true };
-    } else {
-      const bidir = routePairs.has(`${route.to}|${route.from}`);
-      curve = curveBetween(route.from, route.to, bidir ? -18 : 12);
+      return {
+        d: `M ${p[0]} ${p[1]} L 72 ${p[1]} Q 52 ${p[1]} 52 ${p[1] - 20} L 52 ${q[1] + 20} Q 52 ${q[1]} 72 ${q[1]} L ${q[0]} ${q[1]}`,
+        mid: [52, 364],
+        angle: -90
+      };
     }
+    if (topToMid) {
+      const dx = q[0] < p[0] ? -20 : 20;
+      return {
+        d: `M ${p[0]} ${p[1]} L ${q[0] - dx} ${p[1]} Q ${q[0]} ${p[1]} ${q[0]} ${p[1] + 20} L ${q[0]} ${q[1]}`,
+        mid: [q[0], 198],
+        angle: 90
+      };
+    }
+    if (sameRowFar) {
+      const yBus = p[1] + 98;
+      const sx = q[0] > p[0] ? 20 : -20;
+      return {
+        d: `M ${p[0]} ${p[1]} L ${p[0]} ${yBus - 16} Q ${p[0]} ${yBus} ${p[0] + sx} ${yBus} L ${q[0] - sx} ${yBus} Q ${q[0]} ${yBus} ${q[0]} ${yBus - 16} L ${q[0]} ${q[1]}`,
+        mid: [(p[0] + q[0]) / 2, yBus],
+        angle: q[0] > p[0] ? 0 : 180,
+        isLoop: true
+      };
+    }
+    if (midToBottom) {
+      const busY = 492;
+      if (Math.abs(p[0] - q[0]) < 12) {
+        return { d: `M ${p[0]} ${p[1]} L ${q[0]} ${q[1]}`, mid: [q[0], 520], angle: 90 };
+      }
+      const sx = q[0] > p[0] ? 16 : -16;
+      return {
+        d: `M ${p[0]} ${p[1]} L ${p[0]} ${busY - 14} Q ${p[0]} ${busY} ${p[0] + sx} ${busY} L ${q[0] - sx} ${busY} Q ${q[0]} ${busY} ${q[0]} ${busY + 16} L ${q[0]} ${q[1]}`,
+        mid: [q[0], 532],
+        angle: 90
+      };
+    }
+    if (sameRow) {
+      return {
+        d: `M ${p[0]} ${p[1]} L ${q[0]} ${q[1]}`,
+        mid: [(p[0] + q[0]) / 2, p[1]],
+        angle: q[0] > p[0] ? 0 : 180,
+        isLoop: p[1] > 200 && p[1] < 500
+      };
+    }
+    return curveBetween(from, to, 0);
+  };
+
+  for (const route of view()?.routes || []) {
+    const pairKey = [route.from, route.to].sort().join('|');
+    const bidir = routePairs.has(`${route.to}|${route.from}`);
+    if (bidir && drawnUndirected.has(pairKey)) continue;
+    if (bidir) drawnUndirected.add(pairKey);
+
+    const curve = orthogonalRoute(route.from, route.to);
     if (!curve) continue;
     const path = document.createElementNS(ns, 'path');
     path.setAttribute('d', curve.d);
@@ -717,17 +776,30 @@ function renderRoutes() {
     svg.append(path);
 
     if (badges) {
-      const chevron = document.createElementNS(ns, 'path');
-      chevron.setAttribute('d', 'M -4.5 -3.6 L 3.8 0 L -4.5 3.6');
-      chevron.setAttribute('class', 'route-chevron');
-      chevron.setAttribute('transform', `translate(${curve.mid[0].toFixed(1)} ${curve.mid[1].toFixed(1)}) rotate(${curve.angle.toFixed(1)})`);
-      chevron.dataset.from = route.from;
-      chevron.dataset.to = route.to;
-      badges.append(chevron);
+      if (bidir) {
+        const right = document.createElementNS(ns, 'path');
+        right.setAttribute('d', 'M 2 -3.4 L 8.5 0 L 2 3.4');
+        right.setAttribute('class', 'route-chevron');
+        right.setAttribute('transform', `translate(${curve.mid[0].toFixed(1)} ${curve.mid[1].toFixed(1)})`);
+        right.dataset.from = route.from; right.dataset.to = route.to;
+        const left = document.createElementNS(ns, 'path');
+        left.setAttribute('d', 'M -2 -3.4 L -8.5 0 L -2 3.4');
+        left.setAttribute('class', 'route-chevron');
+        left.setAttribute('transform', `translate(${curve.mid[0].toFixed(1)} ${curve.mid[1].toFixed(1)})`);
+        left.dataset.from = route.from; left.dataset.to = route.to;
+        badges.append(left, right);
+      } else {
+        const chevron = document.createElementNS(ns, 'path');
+        chevron.setAttribute('d', 'M -4.2 -3.4 L 3.8 0 L -4.2 3.4');
+        chevron.setAttribute('class', 'route-chevron');
+        chevron.setAttribute('transform', `translate(${curve.mid[0].toFixed(1)} ${curve.mid[1].toFixed(1)}) rotate(${curve.angle.toFixed(1)})`);
+        chevron.dataset.from = route.from; chevron.dataset.to = route.to;
+        badges.append(chevron);
+      }
     }
   }
 
-  // Observed cross-department reference connections
+  // Observed cross-department reference connections (revealed cleanly on hover)
   const grouped = new Map();
   for (const relation of view()?.handoffs || []) {
     if (relation.kind !== 'reference') continue;
@@ -739,13 +811,7 @@ function renderRoutes() {
 
   for (const [identity, entry] of grouped) {
     const { relation, count, activities: relActs } = entry;
-    const p = state.positions.get(relation.from);
-    const q = state.positions.get(relation.to);
-    if (!p || !q) continue;
-    const sameRowFar = Math.abs(p[1] - q[1]) < 10 && Math.abs(p[0] - q[0]) > 420;
-    const curve = sameRowFar
-      ? { d: `M ${p[0]} ${p[1]} Q ${(p[0] + q[0]) / 2} ${p[1] + 150} ${q[0]} ${q[1]}`, mid: [(p[0] + q[0]) / 2, p[1] + 92] }
-      : curveBetween(relation.from, relation.to, -22);
+    const curve = orthogonalRoute(relation.from, relation.to);
     if (!curve) continue;
 
     const path = document.createElementNS(ns, 'path');
@@ -799,7 +865,6 @@ function highlightRoutes(id) {
   for (const badge of document.querySelectorAll('#hive-badges .route-badge')) {
     const match = badge.dataset.from === id || badge.dataset.to === id;
     badge.classList.toggle('selected', match);
-    badge.style.opacity = match ? '1' : '0.68';
   }
 }
 
