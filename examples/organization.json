@@ -5,7 +5,8 @@
     {"id":"research","label":"Research","responsibility":"Claim questions, develop arguments and submit contributions.","execution":"sessions"},
     {"id":"review","label":"Review","responsibility":"Question assumptions and review proposed contributions.","execution":"sessions"},
     {"id":"verification","label":"Verification","responsibility":"Execute the repository's existing checks.","execution":"actions"},
-    {"id":"publishing","label":"Publishing","responsibility":"Turn accepted contributions into readable publications.","execution":"mixed"}
+    {"id":"publishing","label":"Publishing","responsibility":"Turn accepted contributions into readable publications.","execution":"mixed"},
+    {"id":"direction","label":"Human Direction","responsibility":"Define priorities, frame open questions and steer the 24/7 loop.","execution":"human"}
   ],
   "sources": [
     {"id":"questions","kind":"github_issues","department":"research","label":"Research questions","repository":"YOUR-ORG/YOUR-RESEARCH-REPO"},
@@ -16,10 +17,12 @@
     {"id":"publications","kind":"github_pulls","department":"publishing","label":"Publication contributions","repository":"YOUR-ORG/YOUR-PUBLICATION-REPO"}
   ],
   "routes": [
+    {"from":"direction","to":"research","label":"Frame goals & priorities"},
     {"from":"research","to":"review","label":"Submit an argument"},
     {"from":"review","to":"research","label":"Revise the argument"},
     {"from":"research","to":"verification","label":"Check the implementation"},
-    {"from":"verification","to":"publishing","label":"Prepare an accepted result"}
+    {"from":"verification","to":"publishing","label":"Prepare an accepted result"},
+    {"from":"publishing","to":"direction","label":"Bring feedback back"}
   ],
   "freshness_seconds": 180,
   "retention_seconds": 604800,
