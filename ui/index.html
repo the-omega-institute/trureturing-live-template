@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#F6F4EE">
+  <meta name="description" content="Live honeycomb observatory for human + AI GitHub organizations powered by the Rust live-harness foundation.">
+  <title>AI Organization Live · 24/7 Architecture Observatory</title>
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/app.css">
+  <script type="module" src="assets/app.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#institute">Skip to live architecture</a>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./">
+        <img src="assets/mark.svg" width="30" height="30" alt="">
+        <span class="brand-name"><span id="brand-org">AI Org</span> <em>live</em></span>
+        <span class="brand-tag">24/7 Architecture Observatory</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#institute">Architecture</a>
+        <a href="#live-ops">Live Pulse</a>
+        <a href="#howto">Connect GitHub</a>
+      </nav>
+      <div class="header-right">
+        <span class="demo-pill" id="demo-badge" hidden>Demo Preview</span>
+        <span class="connection" id="connection"><i></i><span>Connecting…</span></span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle light / dark observatory mode">☾</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="ticker-bar" id="live-ticker" aria-live="polite">
+    <div class="ticker-inner">
+      <span class="ticker-badge">JUST IN</span>
+      <button type="button" class="ticker-message" id="ticker-action">
+        <span id="ticker-text">Loading organization observation stream…</span>
+      </button>
+      <span class="ticker-meta" id="ticker-time"></span>
+    </div>
+  </div>
+
+  <main>
+    <section class="masthead" aria-labelledby="page-title">
+      <div class="masthead-copy">
+        <p class="eyebrow">AI-ORG.LIVE.V1 / 24·7 HUMAN + AI ORGANIZATION</p>
+        <h1 id="page-title"><span id="org-title">Your AI Organization</span>, <em>in live relay.</em></h1>
+        <p class="hero-description">Human direction guides the mission while AI sessions and GitHub Actions loop 24/7 across issues, pull requests, reviews, and checks. Click any honeycomb department to zoom directly into its internal floorplan.</p>
+      </div>
+      <div class="masthead-side">
+        <div class="tool-families" aria-label="Connected runtimes">
+          <span>GitHub Issues &amp; PRs</span>
+          <span>Agent Sessions</span>
+          <span class="tool-actions">24/7 GitHub Actions</span>
+        </div>
+        <div class="institute-metrics" id="institute-metrics">
+          <span>Preparing organization overview…</span>
+        </div>
+      </div>
+    </section>
+
+    <p id="connection-note" class="connection-note" role="status" hidden></p>
+
+    <section id="institute" class="institute" aria-labelledby="institute-title">
+      <div class="room-toolbar">
+        <div class="room-title-group">
+          <p class="eyebrow">COMPANY ARCHITECTURE · 24/7 AI LOOP &amp; HUMAN IN THE LOOP</p>
+          <h2 id="institute-title">Organization Architecture &amp; Department Relay</h2>
+        </div>
+        <div class="room-controls">
+          <div class="mode-switch" role="group" aria-label="Observatory mode">
+            <button type="button" data-mode="organization" aria-pressed="true">Architecture</button>
+            <button type="button" data-mode="journey" aria-pressed="false">Follow a Relay</button>
+          </div>
+          <button class="follow-button" id="follow-live" type="button" aria-pressed="true"><i></i><span>Follow live</span></button>
+        </div>
+      </div>
+
+      <div class="method-strip" aria-label="Organization relay pipeline">
+        <div class="method-heading">
+          <span class="eyebrow">RELAY PIPELINE</span>
+          <strong>How work moves step by step across departments</strong>
+          <span>Click any stage to zoom directly into its department floorplan</span>
+        </div>
+        <div class="method-steps" id="method-steps"></div>
+      </div>
+
+      <div class="research-room" id="research-room">
+        <div class="hive-board" id="hive-board" role="group" aria-label="Organization honeycomb architecture; click a department to zoom into its floorplan">
+          <div class="board-bar">
+            <div class="board-label-wrap">
+              <div class="board-label"><span class="live-dot"></span> COMPANY ARCHITECTURE / 24·7 AI AUTONOMOUS LOOP</div>
+              <div class="board-caption">Click any honeycomb cell to zoom inside · <span>Solid arrows: configured routes</span> · <span>Dashed arcs: observed cross-repo handoffs</span></div>
+            </div>
+            <div class="board-actions">
+              <button id="motion-toggle" type="button" aria-pressed="false" title="Pause motion">Still</button>
+              <button id="expand-room" type="button" aria-label="Expand full screen" title="Expand full screen">⤢</button>
+            </div>
+          </div>
+
+          <div class="hive-stage">
+            <div class="hive-canvas" id="hive-canvas">
+              <svg id="hive-routes" viewBox="0 0 1000 740" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+              <div id="hive-cells" class="hive-cells"><p class="loading">Building honeycomb architecture…</p></div>
+              <svg id="hive-badges" viewBox="0 0 1000 740" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+            </div>
+          </div>
+
+          <div class="hive-footer-bar">
+            <div class="hive-legend">
+              <span><i class="legend-running"></i>Active now</span>
+              <span><i class="legend-session"></i>Sessions</span>
+              <span><i class="legend-action"></i>GitHub Actions</span>
+              <span><i class="legend-route"></i>Relay route</span>
+              <span><i class="legend-connection"></i>Cross-repo ref</span>
+            </div>
+            <div class="hive-hover-hint" id="hive-hover-hint">Hover to trace handoffs, click to zoom inside</div>
+          </div>
+
+          <div id="department-lens" class="department-lens" hidden aria-live="polite">
+            <div class="lens-topbar">
+              <button id="lens-back" type="button" class="lens-back">← Zoom out to architecture</button>
+              <div id="lens-switcher" class="lens-switcher" role="tablist" aria-label="Switch zoomed department"></div>
+            </div>
+
+            <div class="lens-header-strip">
+              <div class="lens-title-block">
+                <span id="lens-exec-pill" class="execution-label">Sessions</span>
+                <h3 id="lens-title">Department</h3>
+                <p id="lens-responsibility"></p>
+                <span id="lens-freshness" class="lens-freshness"></span>
+              </div>
+              <div id="lens-metrics" class="lens-metrics"></div>
+            </div>
+
+            <div class="dept-zoom-stage" id="dept-zoom-stage">
+              <div class="dept-zoom-canvas" id="dept-zoom-canvas">
+                <svg id="lens-map-svg" viewBox="0 0 1200 580" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+                <div id="lens-upstream" class="map-portal-col map-portal-left" aria-label="Upstream departments"></div>
+                <div id="lens-agents" class="map-seat-layer" aria-label="Public work seats"></div>
+                <div id="lens-hub" class="map-hub-node" aria-hidden="true"></div>
+                <div id="lens-topics" class="map-topic-layer" aria-label="Active work items"></div>
+                <div id="lens-downstream" class="map-portal-col map-portal-right" aria-label="Downstream departments"></div>
+              </div>
+              <div id="lens-extra-seats" class="lens-extra-seats" hidden></div>
+            </div>
+
+            <div class="lens-bottom-strip">
+              <div class="lens-method">
+                <span class="lens-method-tag">FLOW</span>
+                <strong id="lens-input">Incoming work</strong>
+                <i aria-hidden="true">→</i>
+                <strong id="lens-output">Department output</strong>
+              </div>
+              <div id="lens-spotlight" class="lens-spotlight">
+                <span>Hover or click any work seat to highlight its live beams · Click a work node to trace its relay · Click portals to jump between departments</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="department-panel" id="department-panel" aria-labelledby="department-title">
+          <div class="department-top">
+            <span id="department-mode" class="execution-label">Sessions</span>
+            <span class="small-label" id="department-state">Connecting</span>
+          </div>
+          <div class="department-title-row">
+            <h3 id="department-title">Department</h3>
+            <button type="button" id="open-lens-button" class="open-lens-btn">Zoom inside ⤢</button>
+          </div>
+          <p id="department-responsibility"></p>
+          <div class="department-people" id="department-people"></div>
+
+          <div class="panel-heading">
+            <h4>Public work seats</h4>
+            <span id="department-agent-count"></span>
+          </div>
+          <p class="identity-note">Only explicitly registered runtime sources are labeled as agents; GitHub accounts remain public accounts.</p>
+          <div id="department-agents" class="department-agents"><p class="loading">Loading seats…</p></div>
+
+          <div class="panel-heading work-heading">
+            <h4 id="department-work-title">Recent department work</h4>
+            <span id="department-work-count"></span>
+          </div>
+          <div id="department-work" class="department-work"><p class="loading">Waiting for observations…</p></div>
+
+          <div id="department-connections" class="department-connections"></div>
+        </aside>
+
+        <div id="journey-panel" class="journey-panel" hidden>
+          <div class="journey-heading">
+            <div>
+              <p class="eyebrow">FOLLOW THE RELAY · STEP BY STEP</p>
+              <h3 id="journey-title">Select an active task to trace</h3>
+              <p id="journey-description">Follow explicit cross-repository references to see how one work item travels across departments.</p>
+            </div>
+            <button type="button" id="journey-back" class="lens-back">← Back to architecture</button>
+          </div>
+          <div id="journey-stages" class="journey-stages"></div>
+          <div class="journey-detail">
+            <div class="journey-roster-box">
+              <h4>Participating seats</h4>
+              <div id="journey-people" class="journey-people"></div>
+              <div id="journey-links" class="journey-links"></div>
+            </div>
+            <div>
+              <h4>Observed relay timeline</h4>
+              <div id="journey-events" class="journey-events"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-caption">
+        <span id="flow-summary">Human direction → 24/7 AI loop → Automated verification → Delivery</span>
+        <span id="institute-scope"></span>
+      </div>
+
+      <div class="activity-heading">
+        <h3>Latest Relay Steps</h3>
+        <span id="activity-note">Live public observations</span>
+      </div>
+      <div id="activity-strip" class="activity-strip" aria-label="Recent organization activity"></div>
+    </section>
+
+    <section id="live-ops" class="live-ops" aria-labelledby="live-ops-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">INSIDE THE ORGANIZATION · LIVE PULSE</p>
+          <h2 id="live-ops-title">Live Collaboration Pulse &amp; Automated Checker Lights</h2>
+        </div>
+        <div class="feed-filters" role="group" aria-label="Filter live pulse">
+          <button type="button" data-feed-filter="all" aria-pressed="true">All</button>
+          <button type="button" data-feed-filter="work" aria-pressed="false">Tasks &amp; PRs</button>
+          <button type="button" data-feed-filter="discussion" aria-pressed="false">Discussions &amp; Reviews</button>
+          <button type="button" data-feed-filter="automation" aria-pressed="false">CI Runs</button>
+        </div>
+      </div>
+
+      <div class="ops-grid">
+        <div class="ops-feed-column">
+          <div class="ops-card-head">
+            <h3>Recent Collaboration Pulse</h3>
+            <span id="live-feed-meta" class="mono-meta">Syncing…</span>
+          </div>
+          <div id="live-feed" class="live-feed">
+            <p class="loading">Syncing organization activity…</p>
+          </div>
+        </div>
+
+        <div class="ops-side-column">
+          <div class="ops-panel">
+            <div class="ops-card-head">
+              <h3>Automated Checker Lights</h3>
+              <span id="checker-summary" class="mono-meta">GitHub Actions</span>
+            </div>
+            <div id="checker-lights" class="checker-lights" aria-label="Automated check light matrix"></div>
+            <div id="checker-runs" class="checker-runs">
+              <p class="loading">Waiting for workflow runs…</p>
+            </div>
+          </div>
+
+          <div class="ops-panel">
+            <div class="ops-card-head">
+              <h3>Cross-Department Relay Traffic</h3>
+              <span id="relay-summary" class="mono-meta">Explicit references</span>
+            </div>
+            <div id="relay-bridges" class="relay-bridges">
+              <p class="loading">Counting cross-department references…</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="howto" class="howto-section" aria-labelledby="howto-title">
+      <div class="template-card">
+        <p class="eyebrow">POWERED BY LIVE-HARNESS (RUST)</p>
+        <h3 id="howto-title">Connect any human + AI GitHub organization in three steps</h3>
+        <p>This starter UI reads any <code>ai-org.live.v1</code> JSON generated by the Rust <code>live-harness</code> CLI — no frontend build step, browser tokens, or repository modifications required.</p>
+        <ol class="template-steps horizontal">
+          <li><strong>01 Configure departments</strong><span>Edit <code>organization.json</code> with your departments, GitHub repositories, workflows, and relay routes.</span></li>
+          <li><strong>02 Run the Rust collector</strong><span>Run <code>live-harness collect --config organization.json --state .live-state/checkpoint.json --output ui/organization.json</code>.</span></li>
+          <li><strong>03 Publish statically</strong><span>Serve <code>ui/</code> on GitHub Pages, Vercel, or any static host (or pass <code>?data=https://.../organization.json</code>).</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <a class="brand" href="./">
+        <img src="assets/mark.svg" width="22" height="22" alt="">
+        <span><span id="footer-org">AI Org</span> <em>live</em></span>
+      </a>
+      <p>Built on the open-source Rust event foundation (<code>ai-org.live.v1</code>).</p>
+      <div class="footer-links">
+        <a href="https://github.com/the-omega-institute/trureturing-live-template" target="_blank" rel="noopener noreferrer">trureturing-live-template ↗</a>
+        <a href="https://live.trureturing.org/" target="_blank" rel="noopener noreferrer">Reference deployment: trureturing live ↗</a>
+      </div>
+    </footer>
+  </main>
+
+  <div id="live-announcement" class="visually-hidden" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript-note">Enable JavaScript to inspect the live organization architecture.</p></noscript>
+</body>
+</html>

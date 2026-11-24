@@ -2,12 +2,14 @@
 
 Map an organization's existing GitHub activity into departments, responsibilities,
 tasks, participants and actual cross-repository handoffs. The Rust library and CLI
-produce a stable, human-interface-ready JSON view. **This template contains no UI.**
+produce a stable, human-interface-ready `ai-org.live.v1` JSON view, paired with a
+zero-build starter honeycomb observatory in `ui/`.
 
-The source adapters, reducer and persistence layer are independent of trureturing.
-Organizations own their configuration, credentials, storage, publishing and UI.
-Nothing here assigns work, launches agents, changes observed repositories or sends
-messages. The trureturing deployment is maintained in
+The source adapters, reducer, persistence layer and starter UI are completely
+independent of trureturing. Organizations own their configuration, credentials,
+storage, publishing and UI customization. Nothing here assigns work, launches
+agents, changes observed repositories or sends messages. The live trureturing
+deployment is maintained in
 [trureturing-live](https://github.com/the-omega-institute/trureturing-live).
 
 ## Start with GitHub
@@ -23,8 +25,22 @@ messages. The trureturing deployment is maintained in
 ```sh
 live-harness check --config organization.json
 live-harness collect --config organization.json \
-  --state .live-state/checkpoint.json --output public/organization.json
+  --state .live-state/checkpoint.json --output ui/organization.json
+python3 -m http.server 8780 --directory ui
 ```
+
+Open http://localhost:8780 to view your 3-tier architecture honeycomb (`Human in the
+Loop` / `24/7 AI Autonomous Loop` / `Delivery & Platform`), click any honeycomb cell
+to zoom into its spatial department map, trace task relays across repositories, and
+watch the live pulse and automated checker lights.
+
+- **Instant preview**: Running `python3 -m http.server 8780 --directory ui` before
+  your first collection automatically loads `ui/demo-organization.json` with a
+  `Demo Preview` badge.
+- **Custom feed URL**: Point the starter UI at any published `ai-org.live.v1` endpoint
+  using `?data=https://your-host/organization.json` or `<meta name="live-data" content="...">`.
+- **Light & dark observatory themes**: Toggle between Warm Ivory Studio and Obsidian
+  Slate modes directly from the header.
 
 Run the same collection command approximately once a minute from your existing
 worker, scheduler or GitHub Action. Keep one writer per checkpoint; the local store

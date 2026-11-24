@@ -1,0 +1,355 @@
+{
+  "schema": "ai-org.live.v1",
+  "organization": {
+    "id": "example-ai-org",
+    "label": "Example AI Organization"
+  },
+  "observed_at": "2026-11-24T12:00:00Z",
+  "departments": [
+    {
+      "id": "direction",
+      "label": "Human Direction",
+      "responsibility": "Define priorities, frame open questions, and steer the autonomous loop.",
+      "execution": "human",
+      "running_automations": 0,
+      "running_sessions": 0,
+      "observed_activities": 0,
+      "activities_truncated": false,
+      "participants": [],
+      "activities": []
+    },
+    {
+      "id": "research",
+      "label": "Core R&D",
+      "responsibility": "Claim open issues, prototype solutions, and submit reviewable pull requests.",
+      "execution": "sessions",
+      "running_automations": 0,
+      "running_sessions": 2,
+      "observed_activities": 42,
+      "activities_truncated": false,
+      "participants": [
+        {"id": "agent-codex-1", "label": "Researcher A", "kind": "agent", "tool": "Codex"},
+        {"id": "agent-claude-2", "label": "Researcher B", "kind": "agent", "tool": "Claude"},
+        {"id": "alice", "label": "alice", "kind": "account", "tool": null}
+      ],
+      "activities": [
+        {
+          "id": "sess-1",
+          "source": "session-a",
+          "department": "research",
+          "kind": "session",
+          "status": "working",
+          "label": "Derive tighter convergence bound for distributed consensus",
+          "actor": {"id": "agent-codex-1", "label": "Researcher A", "kind": "agent", "tool": "Codex"},
+          "at": "2026-11-24T11:59:20Z",
+          "url": "https://github.com/example-org/core/pull/104",
+          "task": {"repository": "example-org/core", "number": 104},
+          "references": [{"repository": "example-org/core", "number": 104}],
+          "fresh": true
+        },
+        {
+          "id": "sess-2",
+          "source": "session-b",
+          "department": "research",
+          "kind": "session",
+          "status": "working",
+          "label": "Optimize streaming checkpoint compaction under burst load",
+          "actor": {"id": "agent-claude-2", "label": "Researcher B", "kind": "agent", "tool": "Claude"},
+          "at": "2026-11-24T11:58:10Z",
+          "url": "https://github.com/example-org/core/pull/108",
+          "task": {"repository": "example-org/core", "number": 108},
+          "references": [{"repository": "example-org/core", "number": 108}],
+          "fresh": true
+        },
+        {
+          "id": "pr-104",
+          "source": "contributions",
+          "department": "research",
+          "kind": "contribution",
+          "status": "open",
+          "label": "Tighter convergence bound for distributed consensus",
+          "actor": {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:54:00Z",
+          "url": "https://github.com/example-org/core/pull/104",
+          "task": {"repository": "example-org/core", "number": 104},
+          "references": [{"repository": "example-org/core", "number": 91}],
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "review",
+      "label": "Independent Review",
+      "responsibility": "Audit edge cases, challenge assumptions, and return actionable feedback.",
+      "execution": "sessions",
+      "running_automations": 0,
+      "running_sessions": 0,
+      "observed_activities": 18,
+      "activities_truncated": false,
+      "participants": [
+        {"id": "reviewer-bot", "label": "reviewer-bot", "kind": "account", "tool": null},
+        {"id": "bob", "label": "bob", "kind": "account", "tool": null}
+      ],
+      "activities": [
+        {
+          "id": "rev-1",
+          "source": "reviews",
+          "department": "review",
+          "kind": "review",
+          "status": "open",
+          "label": "Edge-case review on convergence bound proof",
+          "actor": {"id": "reviewer-bot", "label": "reviewer-bot", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:55:00Z",
+          "url": "https://github.com/example-org/core/pull/104#pullrequestreview-1",
+          "task": {"repository": "example-org/core", "number": 104},
+          "references": [{"repository": "example-org/core", "number": 104}],
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "verification",
+      "label": "CI Verification",
+      "responsibility": "Run automated builds, proofs, and test suites 24/7 via GitHub Actions.",
+      "execution": "actions",
+      "running_automations": 3,
+      "running_sessions": 0,
+      "observed_activities": 96,
+      "activities_truncated": false,
+      "participants": [
+        {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+        {"id": "ci-runner-1", "label": "ci-runner-1", "kind": "account", "tool": null}
+      ],
+      "activities": [
+        {
+          "id": "ci-1",
+          "source": "checks",
+          "department": "verification",
+          "kind": "automation",
+          "status": "working",
+          "label": "Continuous verification suite",
+          "actor": {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:59:40Z",
+          "url": "https://github.com/example-org/core/actions/runs/501",
+          "task": {"repository": "example-org/core", "number": 104},
+          "references": [{"repository": "example-org/core", "number": 104}],
+          "fresh": true
+        },
+        {
+          "id": "ci-2",
+          "source": "checks",
+          "department": "verification",
+          "kind": "automation",
+          "status": "working",
+          "label": "Continuous verification suite",
+          "actor": {"id": "ci-runner-1", "label": "ci-runner-1", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:59:10Z",
+          "url": "https://github.com/example-org/core/actions/runs/502",
+          "task": {"repository": "example-org/core", "number": 108},
+          "references": [{"repository": "example-org/core", "number": 108}],
+          "fresh": true
+        },
+        {
+          "id": "ci-3",
+          "source": "checks",
+          "department": "verification",
+          "kind": "automation",
+          "status": "working",
+          "label": "Integration stress check",
+          "actor": {"id": "ci-runner-1", "label": "ci-runner-1", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:58:50Z",
+          "url": "https://github.com/example-org/core/actions/runs/503",
+          "task": null,
+          "references": [],
+          "fresh": true
+        },
+        {
+          "id": "ci-4",
+          "source": "checks",
+          "department": "verification",
+          "kind": "automation",
+          "status": "succeeded",
+          "label": "Continuous verification suite",
+          "actor": {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:50:00Z",
+          "url": "https://github.com/example-org/core/actions/runs/499",
+          "task": {"repository": "example-org/core", "number": 104},
+          "references": [{"repository": "example-org/core", "number": 104}],
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "publishing",
+      "label": "Docs & Publishing",
+      "responsibility": "Turn verified engineering and research into readable docs and releases.",
+      "execution": "mixed",
+      "running_automations": 1,
+      "running_sessions": 0,
+      "observed_activities": 29,
+      "activities_truncated": false,
+      "participants": [
+        {"id": "docs-bot", "label": "docs-bot", "kind": "account", "tool": null},
+        {"id": "alice", "label": "alice", "kind": "account", "tool": null}
+      ],
+      "activities": [
+        {
+          "id": "pub-1",
+          "source": "pub-ci",
+          "department": "publishing",
+          "kind": "automation",
+          "status": "working",
+          "label": "Build & publish documentation",
+          "actor": {"id": "docs-bot", "label": "docs-bot", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:59:00Z",
+          "url": "https://github.com/example-org/docs/actions/runs/88",
+          "task": {"repository": "example-org/docs", "number": 21},
+          "references": [{"repository": "example-org/core", "number": 104}],
+          "fresh": true
+        },
+        {
+          "id": "pub-2",
+          "source": "publications",
+          "department": "publishing",
+          "kind": "contribution",
+          "status": "open",
+          "label": "Chapter: Distributed consensus convergence proofs",
+          "actor": {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:46:00Z",
+          "url": "https://github.com/example-org/docs/pull/21",
+          "task": {"repository": "example-org/docs", "number": 21},
+          "references": [{"repository": "example-org/core", "number": 104}],
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "label": "Platform & Tools",
+      "responsibility": "Maintain observability, developer tooling, and automation pipelines.",
+      "execution": "mixed",
+      "running_automations": 0,
+      "running_sessions": 0,
+      "observed_activities": 12,
+      "activities_truncated": false,
+      "participants": [
+        {"id": "bob", "label": "bob", "kind": "account", "tool": null}
+      ],
+      "activities": [
+        {
+          "id": "plat-1",
+          "source": "platform-prs",
+          "department": "platform",
+          "kind": "contribution",
+          "status": "merged",
+          "label": "Add live honeycomb architecture observatory",
+          "actor": {"id": "bob", "label": "bob", "kind": "account", "tool": null},
+          "at": "2026-11-24T11:32:00Z",
+          "url": "https://github.com/example-org/platform/pull/14",
+          "task": {"repository": "example-org/platform", "number": 14},
+          "references": [],
+          "fresh": true
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {"from": "direction", "to": "research", "label": "Define goals & priorities"},
+    {"from": "research", "to": "review", "label": "Submit proposal"},
+    {"from": "review", "to": "research", "label": "Return review feedback"},
+    {"from": "research", "to": "verification", "label": "Trigger CI checks"},
+    {"from": "verification", "to": "publishing", "label": "Promote verified work"},
+    {"from": "publishing", "to": "direction", "label": "Bring user feedback back"},
+    {"from": "platform", "to": "publishing", "label": "Power docs & observability"}
+  ],
+  "handoffs": [
+    {"kind": "reference", "from": "research", "to": "verification", "activity": "ci-1", "reference": {"repository": "example-org/core", "number": 104}, "url": "https://github.com/example-org/core/actions/runs/501"},
+    {"kind": "reference", "from": "research", "to": "verification", "activity": "ci-2", "reference": {"repository": "example-org/core", "number": 108}, "url": "https://github.com/example-org/core/actions/runs/502"},
+    {"kind": "reference", "from": "research", "to": "review", "activity": "rev-1", "reference": {"repository": "example-org/core", "number": 104}, "url": "https://github.com/example-org/core/pull/104#pullrequestreview-1"},
+    {"kind": "reference", "from": "research", "to": "publishing", "activity": "pub-2", "reference": {"repository": "example-org/core", "number": 104}, "url": "https://github.com/example-org/docs/pull/21"},
+    {"kind": "reference", "from": "verification", "to": "publishing", "activity": "pub-1", "reference": {"repository": "example-org/core", "number": 104}, "url": "https://github.com/example-org/docs/actions/runs/88"}
+  ],
+  "handoffs_truncated": false,
+  "recent": [
+    {
+      "id": "ci-1",
+      "source": "checks",
+      "department": "verification",
+      "kind": "automation",
+      "status": "working",
+      "label": "Continuous verification suite",
+      "actor": {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+      "at": "2026-11-24T11:59:40Z",
+      "url": "https://github.com/example-org/core/actions/runs/501",
+      "task": {"repository": "example-org/core", "number": 104},
+      "references": [{"repository": "example-org/core", "number": 104}],
+      "fresh": true
+    },
+    {
+      "id": "sess-1",
+      "source": "session-a",
+      "department": "research",
+      "kind": "session",
+      "status": "working",
+      "label": "Derive tighter convergence bound for distributed consensus",
+      "actor": {"id": "agent-codex-1", "label": "Researcher A", "kind": "agent", "tool": "Codex"},
+      "at": "2026-11-24T11:59:20Z",
+      "url": "https://github.com/example-org/core/pull/104",
+      "task": {"repository": "example-org/core", "number": 104},
+      "references": [{"repository": "example-org/core", "number": 104}],
+      "fresh": true
+    },
+    {
+      "id": "pub-1",
+      "source": "pub-ci",
+      "department": "publishing",
+      "kind": "automation",
+      "status": "working",
+      "label": "Build & publish documentation",
+      "actor": {"id": "docs-bot", "label": "docs-bot", "kind": "account", "tool": null},
+      "at": "2026-11-24T11:59:00Z",
+      "url": "https://github.com/example-org/docs/actions/runs/88",
+      "task": {"repository": "example-org/docs", "number": 21},
+      "references": [{"repository": "example-org/core", "number": 104}],
+      "fresh": true
+    },
+    {
+      "id": "rev-1",
+      "source": "reviews",
+      "department": "review",
+      "kind": "review",
+      "status": "open",
+      "label": "Edge-case review on convergence bound proof",
+      "actor": {"id": "reviewer-bot", "label": "reviewer-bot", "kind": "account", "tool": null},
+      "at": "2026-11-24T11:55:00Z",
+      "url": "https://github.com/example-org/core/pull/104#pullrequestreview-1",
+      "task": {"repository": "example-org/core", "number": 104},
+      "references": [{"repository": "example-org/core", "number": 104}],
+      "fresh": true
+    },
+    {
+      "id": "pr-104",
+      "source": "contributions",
+      "department": "research",
+      "kind": "contribution",
+      "status": "open",
+      "label": "Tighter convergence bound for distributed consensus",
+      "actor": {"id": "alice", "label": "alice", "kind": "account", "tool": null},
+      "at": "2026-11-24T11:54:00Z",
+      "url": "https://github.com/example-org/core/pull/104",
+      "task": {"repository": "example-org/core", "number": 104},
+      "references": [{"repository": "example-org/core", "number": 91}],
+      "fresh": true
+    }
+  ],
+  "sources": [
+    {"id": "session-a", "label": "Research seat A", "kind": "session", "observed_at": "2026-11-24T11:59:20Z", "fresh": true, "complete": true},
+    {"id": "session-b", "label": "Research seat B", "kind": "session", "observed_at": "2026-11-24T11:58:10Z", "fresh": true, "complete": true},
+    {"id": "contributions", "label": "Core pull requests", "kind": "github_pulls", "observed_at": "2026-11-24T11:59:00Z", "fresh": true, "complete": true},
+    {"id": "reviews", "label": "Peer reviews", "kind": "github_reviews", "observed_at": "2026-11-24T11:59:00Z", "fresh": true, "complete": true},
+    {"id": "checks", "label": "Continuous verification suite", "kind": "github_actions", "observed_at": "2026-11-24T11:59:45Z", "fresh": true, "complete": true},
+    {"id": "pub-ci", "label": "Build & publish documentation", "kind": "github_actions", "observed_at": "2026-11-24T11:59:10Z", "fresh": true, "complete": true},
+    {"id": "publications", "label": "Documentation PRs", "kind": "github_pulls", "observed_at": "2026-11-24T11:58:00Z", "fresh": true, "complete": true},
+    {"id": "platform-prs", "label": "Platform engineering", "kind": "github_pulls", "observed_at": "2026-11-24T11:57:00Z", "fresh": true, "complete": true}
+  ]
+}
