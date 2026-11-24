@@ -856,7 +856,7 @@ main {
   fill: none;
   stroke: var(--hex-ghost);
   stroke-width: 1;
-  opacity: 0.42;
+  opacity: 0.16;
 }
 
 #hive-routes .arch-tier-box {
@@ -866,17 +866,17 @@ main {
 }
 
 #hive-routes .arch-loop-bay {
-  fill: color-mix(in srgb, var(--t-research) 42%, var(--surface));
-  stroke: color-mix(in srgb, var(--c-research) 45%, var(--border-strong));
-  stroke-width: 1.6;
+  fill: color-mix(in srgb, var(--t-research) 40%, var(--surface));
+  stroke: color-mix(in srgb, var(--c-research) 42%, var(--border-strong));
+  stroke-width: 1.5;
 }
 
 #hive-routes .arch-loop-orbit {
   fill: none;
   stroke: color-mix(in srgb, var(--live) 52%, var(--c-research));
-  stroke-width: 1.6;
-  stroke-dasharray: 7 6;
-  opacity: 0.72;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
+  opacity: 0.65;
   animation: dash-flow 22s linear infinite;
 }
 
@@ -912,47 +912,49 @@ main {
 }
 
 #hive-routes .dept-halo {
-  opacity: 0.62;
+  opacity: 0.52;
   transition: opacity 0.25s ease;
 }
 
 #hive-routes .dept-halo.is-active {
-  opacity: 0.95;
+  opacity: 0.85;
 }
 
 #hive-routes .responsibility-route {
   fill: none;
   stroke: var(--route-stroke);
-  stroke-width: 1.8;
+  stroke-width: 1.5;
   stroke-linecap: round;
-  opacity: 0.78;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease;
+  stroke-linejoin: round;
+  opacity: 0.42;
+  transition: stroke 0.18s ease, stroke-width 0.18s ease, opacity 0.18s ease;
 }
 
 #hive-routes .responsibility-route.is-loop {
-  stroke: color-mix(in srgb, var(--c-research) 65%, var(--route-stroke));
-  stroke-width: 2.1;
+  stroke: color-mix(in srgb, var(--c-research) 58%, var(--route-stroke));
+  stroke-width: 1.75;
+  opacity: 0.56;
 }
 
 #hive-routes .responsibility-route.selected {
   stroke: var(--route-active);
-  stroke-width: 2.6;
-  opacity: 1;
+  stroke-width: 2.3;
+  opacity: 0.96;
 }
 
 #hive-routes .research-connection {
   fill: none;
   stroke: var(--handoff-stroke);
-  stroke-width: 1.65;
-  stroke-dasharray: 5 5;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
   stroke-linecap: round;
-  opacity: 0.42;
+  opacity: 0;
   transition: opacity 0.2s ease, stroke-width 0.2s ease;
 }
 
 #hive-routes .research-connection.selected {
-  opacity: 0.96;
-  stroke-width: 2.35;
+  opacity: 0.72;
+  stroke-width: 1.85;
   animation: dash-flow 18s linear infinite;
 }
 
@@ -969,21 +971,26 @@ main {
 #hive-badges .route-chevron {
   fill: none;
   stroke: var(--route-stroke);
-  stroke-width: 1.9;
+  stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.82;
-  transition: stroke 0.2s ease, opacity 0.2s ease;
+  opacity: 0.5;
+  transition: stroke 0.18s ease, opacity 0.18s ease;
 }
 
 #hive-badges .route-chevron.selected {
   stroke: var(--route-active);
-  stroke-width: 2.4;
+  stroke-width: 2.2;
   opacity: 1;
 }
 
 #hive-badges .route-badge {
-  transition: opacity 0.2s ease;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+#hive-badges .route-badge.selected {
+  opacity: 1;
 }
 
 #hive-badges .route-badge-bg {
